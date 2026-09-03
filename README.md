@@ -179,4 +179,3 @@ python scratch/test_integration_and_edge_cases.py
 - [Portfolio](https://portfolio-muhammad-akif-naveed.vercel.app/)
 
 ---
-*Maintained collaboratively for academic and enhancement purposes.*
