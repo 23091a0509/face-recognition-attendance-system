@@ -121,8 +121,15 @@ export default function Login() {
             } else {
                 navigate('/student', { replace: true });
             }
-        } catch (err) {
-            setError('Invalid credentials. Please try again.');
+        } catch (err: any) {
+            console.error('Login request failed:', err);
+            if (err.response?.data?.detail) {
+                setError(err.response.data.detail);
+            } else if (err.message === 'Network Error' || !err.response) {
+                setError('Cannot reach backend server. Please verify your device is connected to the same Wi-Fi.');
+            } else {
+                setError('Invalid credentials. Please verify your ID and password.');
+            }
         } finally {
             setLoading(false);
         }

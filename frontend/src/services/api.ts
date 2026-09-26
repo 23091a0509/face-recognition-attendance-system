@@ -1,8 +1,19 @@
 // src/services/api.ts
 import axios from "axios";
 
+// Dynamically resolve API URL: default to empty string so all requests use relative paths (Vite dev proxy / Cloudflare tunnel / LAN)
+const getApiBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && !envUrl.includes("localhost:8000") && !envUrl.includes("127.0.0.1:8000")) {
+    return envUrl;
+  }
+  return "";
+};
+
+
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: getApiBaseUrl(),
   headers: {
     "Content-Type": "application/json",
   },
@@ -23,7 +34,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem("token");
-      // Redirect to login with expired query flag if we aren't already there
       if (!window.location.pathname.includes("/login") && !window.location.pathname.includes("/register")) {
         window.location.href = "/login?expired=true";
       }

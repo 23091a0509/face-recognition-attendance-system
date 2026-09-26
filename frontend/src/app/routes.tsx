@@ -8,18 +8,25 @@ import StudentLayout from "../layouts/StudentLayout";
 import AdminDashboard from "../pages/admin/Dashboard";
 import AdminStudents from "../pages/admin/Students";
 import AdminAttendance from "../pages/admin/Attendance";
+import AdminHistory from "../pages/admin/History";
 import AdminReports from "../pages/admin/Reports";
+import AdminSettings from "../pages/admin/Settings";
+import AdminNotifications from "../pages/admin/Notifications";
 
 import StudentDashboard from "../pages/student/Dashboard";
 import StudentAttendance from "../pages/student/Attendance";
+import StudentWebcam from "../pages/student/Webcam";
+import StudentNotifications from "../pages/student/Notifications";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
+import RouteErrorBoundary from "../components/common/RouteErrorBoundary";
 
 export const router = createBrowserRouter([
   {
     // Root wrapper: provides AuthContext to entire app
     element: <AuthProvider><Outlet /></AuthProvider>,
+    errorElement: <RouteErrorBoundary />,
     children: [
   { 
     path: "/", 
@@ -46,7 +53,10 @@ export const router = createBrowserRouter([
       { index: true, element: <AdminDashboard /> },
       { path: "students", element: <AdminStudents /> },
       { path: "attendance", element: <AdminAttendance /> },
+      { path: "history", element: <AdminHistory /> },
       { path: "reports", element: <AdminReports /> },
+      { path: "notifications", element: <AdminNotifications /> },
+      { path: "settings", element: <AdminSettings /> },
     ],
   },
 
@@ -60,7 +70,9 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <StudentDashboard /> },
+      { path: "webcam", element: <StudentWebcam /> },
       { path: "attendance", element: <StudentAttendance /> },
+      { path: "notifications", element: <StudentNotifications /> },
     ],
   },
 
@@ -71,4 +83,4 @@ export const router = createBrowserRouter([
   },
   ], // end AuthProvider children
   },   // end root wrapper
-]);
+]);

@@ -78,14 +78,15 @@ def recognize_faces(frame, students, threshold):
 
     # 1️⃣ Detect boxes FIRST
     boxes, _ = mtcnn.detect(img)
+    if boxes is None or len(boxes) == 0:
+        return []
 
-    # 2️⃣ Extract aligned faces
-    faces = mtcnn(img)
+    # 2️⃣ Extract aligned faces directly from detected boxes (avoids running detection twice)
+    faces = mtcnn.extract(img, boxes, save_path=None)
+    if faces is None or len(faces) == 0:
+        return []
 
     results = []
-
-    if faces is None or boxes is None:
-        return results
 
     for i in range(len(faces)):
         face = faces[i].to(device)          # [3, 160, 160]

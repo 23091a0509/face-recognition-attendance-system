@@ -47,6 +47,8 @@ database/attendance.db
 attendance_service/students_cache.pkl
 *.pkl
 
-# OS
+# OS & Executables
 .DS_Store
 Thumbs.db
+*.exe
+cloudflared.exe

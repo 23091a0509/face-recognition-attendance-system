@@ -4,13 +4,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend_api.routers.auth import router as auth_router
 from backend_api.routers.students import router as students_router
 from backend_api.routers.attendance import router as attendance_router
-
-
-
+from backend_api.routers.notifications import router as notifications_router
 
 from backend.database import create_tables
 
 app = FastAPI(title="Face Attendance System API")
+
+# CORS Configuration allowing Localhost, LAN IPs, and Cloudflare Tunnels
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://.*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def on_startup():
@@ -32,27 +39,8 @@ def on_startup():
 app.include_router(auth_router)
 app.include_router(students_router)
 app.include_router(attendance_router)
+app.include_router(notifications_router)
 
-
-import os
-
-# Production CORS origins setup (Task Group 3)
-origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://face-recognition-attendance-system-jet.vercel.app"
-]
-frontend_env = os.getenv("FRONTEND_URL")
-if frontend_env:
-    origins.extend([url.strip() for url in frontend_env.split(",") if url.strip()])
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.get("/")
 def root():

@@ -45,9 +45,34 @@ def create_token(student_id: str):
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    student_id = form_data.username
-    password = form_data.password
+async def login(request: Request):
+    student_id = None
+    password = None
+
+    # 1. Attempt form data parsing
+    try:
+        form = await request.form()
+        if form:
+            student_id = form.get("username")
+            password = form.get("password")
+    except Exception:
+        pass
+
+    # 2. Attempt JSON payload parsing if form data did not supply credentials
+    if not student_id or not password:
+        try:
+            body = await request.json()
+            if body:
+                student_id = body.get("username") or body.get("identifier") or body.get("student_id")
+                password = body.get("password")
+        except Exception:
+            pass
+
+    if not student_id or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required"
+        )
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -71,6 +96,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "access_token": create_token(student_id),
         "token_type": "bearer"
     }
+
 
 @router.post("/register")
 def register(student_id: str, name: str, department: str, password: str):
