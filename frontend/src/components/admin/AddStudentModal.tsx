@@ -140,6 +140,8 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
         formData.append("name", name);
         formData.append("department", department);
         formData.append("password", password || "password123");
+        formData.append("year", year);
+        formData.append("email", email || `${studentId.toLowerCase()}@institution.edu`);
         formData.append("image", capturedImage);
 
         try {

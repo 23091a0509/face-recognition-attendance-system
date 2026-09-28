@@ -14,18 +14,9 @@ load_dotenv()  # loads .env from project root (ignored by git)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# AUTH-T3: Secret loaded from environment variable, not hardcoded
-_raw_secret = os.getenv("JWT_SECRET_KEY")
-if not _raw_secret:
-    import warnings
-    warnings.warn(
-        "[SECURITY] JWT_SECRET_KEY not set in environment. "
-        "Set it in your .env file before deploying.",
-        stacklevel=2,
-    )
-    _raw_secret = "insecure-default-change-me"
+from backend_api.config import JWT_SECRET_KEY, SERVICE_API_KEY
 
-SECRET_KEY = _raw_secret
+SECRET_KEY = JWT_SECRET_KEY
 ALGORITHM = "HS256"
 
 from backend.database import get_connection
@@ -121,13 +112,12 @@ def get_current_user(request: Request):
     # 1. Check for X-API-KEY authentication (Task Group 4)
     api_key = request.headers.get("X-API-KEY")
     if api_key:
-        expected_key = os.getenv("SERVICE_API_KEY") or "dev-service-api-key"
-        if api_key == expected_key:
+        if api_key == SERVICE_API_KEY:
             return {"student_id": "service_client", "role": "admin"}
         else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid API Key"
+                detail="Invalid Service API Key"
             )
 
     # 2. Check for standard JWT token authentication
@@ -174,4 +164,27 @@ def require_admin(user: dict = Depends(get_current_user)):
 
 @router.get("/me")
 def me(user: dict = Depends(get_current_user)):
-    return {"student_id": user["student_id"], "role": user["role"]}
+    student_id = user["student_id"]
+    role = user["role"]
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, department, photo_url, year, email FROM students WHERE student_id = ?", (student_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    name = row[0] if (row and row[0]) else ("Administrator" if role == "admin" else student_id)
+    department = row[1] if (row and row[1]) else ("Administration" if role == "admin" else "General")
+    photo_url = row[2] if (row and row[2]) else None
+    year = row[3] if (row and row[3]) else None
+    email = row[4] if (row and row[4]) else (f"{student_id.lower()}@institution.edu" if role == "student" else "admin@institution.edu")
+
+    return {
+        "student_id": student_id,
+        "role": role,
+        "name": name,
+        "department": department,
+        "photo_url": photo_url,
+        "year": year,
+        "email": email,
+    }

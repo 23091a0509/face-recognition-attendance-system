@@ -63,6 +63,8 @@ async def register_student(
     name: str = Form(...),
     department: str = Form(...),
     password: str = Form(...),
+    year: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     images: Optional[List[UploadFile]] = File(None),
     admin_user: dict = Depends(require_admin)
@@ -86,123 +88,169 @@ async def register_student(
         if len(all_upload_files) == 0:
             raise HTTPException(status_code=400, detail="No face image was uploaded")
 
+        from attendance_service.recognition import FaceQualityChecker, normalize_embedding
+        quality_checker = FaceQualityChecker()
+
         mtcnn = get_mtcnn()
         facenet = get_facenet()
         device = _get_device()
 
-        sample_embeddings = []
+        sample_records = []  # List of tuples: (normalized_embedding, quality_score)
+        saved_photo_bytes = None
 
-        for upload in all_upload_files:
+        for idx, upload in enumerate(all_upload_files):
             image_bytes = await upload.read()
             if not image_bytes:
                 continue
 
-            img = Image.open(BytesIO(image_bytes)).convert("RGB")
+            if saved_photo_bytes is None:
+                saved_photo_bytes = image_bytes
 
-            # 1. Quality Validation: Face Detection & Count
-            boxes, probs = mtcnn.detect(img)
+            img = Image.open(BytesIO(image_bytes)).convert("RGB")
+            img_np = np.array(img)
+
+            # 1. Quality & Face Detection Validation
+            boxes, probs, landmarks = mtcnn.detect(img, landmarks=True)
             if boxes is None or len(boxes) == 0:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"No face detected in sample '{upload.filename}'. Ensure good lighting and look directly at camera."
+                    detail=f"No face detected in sample #{idx + 1} ('{upload.filename}'). Ensure good lighting and look directly at camera."
                 )
 
             if len(boxes) > 1:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Multiple faces ({len(boxes)}) detected in sample '{upload.filename}'. Only the student should be in the photo."
+                    detail=f"Multiple faces ({len(boxes)}) detected in sample #{idx + 1}. Only the student must be in the frame."
                 )
 
             box = boxes[0]
-            face_w = float(box[2] - box[0])
-            face_h = float(box[3] - box[1])
-            if face_w < 60 or face_h < 60:
+            primary_landmarks = landmarks[0] if (landmarks is not None and len(landmarks) > 0) else None
+
+            # Multi-factor quality check: blur, brightness, contrast, size, pose
+            q_eval = quality_checker.evaluate(img_np, box, primary_landmarks)
+            if not q_eval["valid"]:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Face in '{upload.filename}' is too small/far away. Please move closer to the camera."
+                    detail=f"Sample #{idx + 1} rejected: {q_eval['message']} (Score: {q_eval['quality_score']}). Please capture with proper lighting, distance, and direct camera alignment."
                 )
 
-            faces = mtcnn(img)
-            if faces is None or len(faces) == 0:
+            aligned_faces = mtcnn.extract(img, boxes[:1], save_path=None)
+            if aligned_faces is None or len(aligned_faces) == 0:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Face alignment failed in '{upload.filename}'. Please center your face."
+                    detail=f"Face alignment failed in sample #{idx + 1}. Please center your face."
                 )
 
-            face = faces[0].unsqueeze(0).to(device)
+            face = aligned_faces[0].unsqueeze(0).to(device)
             with torch.no_grad():
                 emb = facenet(face).cpu().numpy()[0]
 
-            # Normalize single sample embedding
-            emb = emb / (np.linalg.norm(emb) + 1e-9)
-            sample_embeddings.append(emb)
+            norm_emb = normalize_embedding(emb)
+            sample_records.append((norm_emb, q_eval["quality_score"]))
 
-        if len(sample_embeddings) == 0:
-            raise HTTPException(status_code=400, detail="Could not process any face samples")
+        if len(sample_records) == 0:
+            raise HTTPException(status_code=400, detail="Could not process any valid face samples")
 
-        # 2. Compute Centroid (Average) Embedding across samples for robust multi-angle matching
+        sample_embeddings = [r[0] for r in sample_records]
+
+        # 2. Compute Representative Centroid Embedding
         if len(sample_embeddings) == 1:
             final_emb = sample_embeddings[0]
         else:
             final_emb = np.mean(sample_embeddings, axis=0)
-            final_emb = final_emb / (np.linalg.norm(final_emb) + 1e-9)
+            final_emb = normalize_embedding(final_emb)
 
         conn = get_connection()
         cursor = conn.cursor()
 
         # 3. Duplicate Face Detection: Prevent registering a face already assigned to another student
-        cursor.execute("SELECT student_id, name, embedding FROM students WHERE embedding IS NOT NULL AND student_id != ?", (student_id,))
-        existing_students = cursor.fetchall()
-        for ex_sid, ex_name, ex_blob in existing_students:
+        cursor.execute("""
+            SELECT s.student_id, s.name, fe.embedding 
+            FROM face_embeddings fe
+            JOIN students s ON fe.student_id = s.student_id
+            WHERE s.student_id != ? AND s.student_id != 'admin'
+        """, (student_id,))
+        existing_embeddings = cursor.fetchall()
+        
+        for ex_sid, ex_name, ex_blob in existing_embeddings:
             try:
-                ex_raw = pickle.loads(ex_blob)
-                ex_emb = ex_raw[0] if hasattr(ex_raw, "__len__") and len(ex_raw) == 1 and hasattr(ex_raw[0], "__len__") else ex_raw
-                norm_ex = ex_emb / (np.linalg.norm(ex_emb) + 1e-9)
-                sim = float(np.dot(final_emb, norm_ex))
+                ex_emb = normalize_embedding(pickle.loads(ex_blob))
+                if ex_emb.ndim == 2:
+                    ex_emb = ex_emb[0]
+                sim = float(np.dot(final_emb, ex_emb))
                 if sim >= 0.70:
                     conn.close()
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! This face is already registered to '{ex_name}' ({ex_sid}) with {match_pct}% match. The same face cannot be registered under multiple student IDs."
+                        detail=f"⚠️ Duplicate Face Detected! Face matches existing student '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
             except Exception:
                 continue
 
-        # save to DB (save as shape (1, 512) for backward compatibility)
-        db_embedding_blob = pickle.dumps(np.array([final_emb]))
+        from datetime import datetime
+        now_iso = datetime.now().isoformat()
 
+        # Save photo file to disk for UI profile display
+        photo_url = None
+        if saved_photo_bytes:
+            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+            os.makedirs(profiles_dir, exist_ok=True)
+            photo_filename = f"{student_id}.jpg"
+            photo_disk_path = os.path.join(profiles_dir, photo_filename)
+            with open(photo_disk_path, "wb") as f:
+                f.write(saved_photo_bytes)
+            photo_url = f"/uploads/profiles/{photo_filename}"
+
+        # Save student record with details and representative centroid embedding
+        db_centroid_blob = pickle.dumps(np.array([final_emb]))
         cursor.execute(
-            "INSERT INTO students (student_id, name, department, password, embedding) VALUES (?, ?, ?, ?, ?)",
-            (student_id, name, department, hashed_password, db_embedding_blob)
+            """INSERT INTO students (student_id, name, department, password, embedding, photo_url, year, email)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (student_id, name, department, hashed_password, db_centroid_blob, photo_url, year, email or f"{student_id.lower()}@institution.edu")
         )
+
+        # Save all individual sample embeddings into face_embeddings table (Phase 3)
+        for idx, (s_emb, q_score) in enumerate(sample_records):
+            cursor.execute(
+                "INSERT INTO face_embeddings (student_id, embedding, quality_score, created_at, capture_condition) VALUES (?, ?, ?, ?, ?)",
+                (student_id, pickle.dumps(s_emb), q_score, now_iso, f"sample_{idx + 1}")
+            )
+
         conn.commit()
         conn.close()
 
-        # ✅ WRITE CLEAN CACHE ENTRY
+        # ✅ Update Recognition Cache with multiple embeddings
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
-
         cache = []
         if os.path.exists(CACHE_PATH):
-            with open(CACHE_PATH, "rb") as f:
-                cache = pickle.load(f)
+            try:
+                with open(CACHE_PATH, "rb") as f:
+                    cache = pickle.load(f)
+            except Exception:
+                cache = []
 
+        cache = [s for s in cache if s.get("student_id") != student_id]
         cache.append({
             "student_id": student_id,
             "name": name,
-            "embedding": final_emb.tolist()
+            "embeddings": [emb.tolist() for emb in sample_embeddings],
+            "embedding": final_emb.tolist()  # legacy fallback
         })
 
         with open(CACHE_PATH, "wb") as f:
             pickle.dump(cache, f)
 
         return {
-            "message": f"Student registered successfully with {len(sample_embeddings)} face sample(s)",
+            "message": f"Student registered successfully with {len(sample_records)} verified face sample(s)",
             "student_id": student_id,
-            "samples_processed": len(sample_embeddings)
+            "photo_url": photo_url,
+            "samples_processed": len(sample_records),
+            "average_quality": round(float(np.mean([r[1] for r in sample_records])), 2)
         }
+
 
 
     except HTTPException:
@@ -223,11 +271,12 @@ def get_all_students(admin_user: dict = Depends(require_admin)):
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Query all students with embedding check
+    # Query all students with embedding check and photo/details
     cursor.execute("""
-        SELECT student_id, name, department, 
+        SELECT student_id, name, department, photo_url, year, email,
                (embedding IS NOT NULL AND length(embedding) > 0) AS has_face
         FROM students
+        WHERE student_id != 'admin'
     """)
     rows = cursor.fetchall()
 
@@ -244,7 +293,7 @@ def get_all_students(admin_user: dict = Depends(require_admin)):
 
     result = []
     for r in rows:
-        sid, name, dept, has_face = r[0], r[1], r[2], bool(r[3])
+        sid, name, dept, photo_url, year, email, has_face = r[0], r[1], r[2], r[3], r[4], r[5], bool(r[6])
         present_count = att_counts.get(sid, 0)
         rate = round((present_count / total_dates * 100), 1) if total_dates > 0 else (92.0 if sid == "CS001" else (87.0 if sid == "CS008" else 0.0))
         
@@ -260,6 +309,9 @@ def get_all_students(admin_user: dict = Depends(require_admin)):
             "student_id": sid,
             "name": name,
             "department": dept,
+            "photo_url": photo_url,
+            "year": year,
+            "email": email or f"{sid.lower()}@institution.edu",
             "has_face": has_face,
             "face_status": face_status,
             "total_present": present_count,
@@ -286,6 +338,14 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
     conn.commit()
     conn.close()
 
+    # Remove photo file if exists
+    photo_disk_path = os.path.join(ROOT_DIR, "uploads", "profiles", f"{student_id}.jpg")
+    if os.path.exists(photo_disk_path):
+        try:
+            os.remove(photo_disk_path)
+        except Exception as e:
+            print(f"[WARN] Failed to delete photo file for {student_id}: {e}")
+
     # Update cache
     if os.path.exists(CACHE_PATH):
         try:
@@ -299,8 +359,11 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
 
     return {"message": f"Student {student_id} successfully deleted"}
 
+from fastapi import Request
+from backend_api.config import SERVICE_API_KEY
+
 @router.get("/{student_id}/embedding")
-def get_student_embedding(student_id: str, admin_user: dict = Depends(require_admin)):
+def get_student_embedding(student_id: str, request: Request, admin_user: dict = Depends(require_admin)):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -309,23 +372,41 @@ def get_student_embedding(student_id: str, admin_user: dict = Depends(require_ad
         (student_id,)
     )
     row = cursor.fetchone()
-    conn.close()
-
     if not row:
+        conn.close()
         raise HTTPException(status_code=404, detail="Student not found")
 
-    if not row[2]:
+    cursor.execute("SELECT embedding FROM face_embeddings WHERE student_id = ?", (student_id,))
+    emb_rows = cursor.fetchall()
+    sample_count = len(emb_rows)
+    conn.close()
+
+    if not row[2] and sample_count == 0:
         raise HTTPException(status_code=400, detail="Student embedding is missing or not initialized")
 
-    try:
-        embedding = pickle.loads(row[2])[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to deserialize embedding data: {e}")
+    # Biometric Privacy Guard (Phase 32): Only transmit raw vectors to authorized internal edge service
+    is_service_client = request.headers.get("X-API-KEY") == SERVICE_API_KEY
+    embedding_data = None
+    all_embeddings = []
+    if is_service_client:
+        try:
+            if row[2]:
+                raw = pickle.loads(row[2])
+                embedding_data = raw[0].tolist() if hasattr(raw, "__len__") and len(raw) == 1 else raw.tolist()
+            for (eblob,) in emb_rows:
+                if eblob:
+                    s_raw = pickle.loads(eblob)
+                    all_embeddings.append(s_raw.tolist() if hasattr(s_raw, "tolist") else list(s_raw))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to deserialize embedding data: {e}")
 
     return {
         "student_id": row[0],
         "name": row[1],
-        "embedding": embedding.tolist()
+        "has_face": True,
+        "sample_count": sample_count or (1 if row[2] else 0),
+        "embedding": embedding_data,
+        "embeddings": all_embeddings if is_service_client else []
     }
 
 @router.post("/{student_id}/update-face")
@@ -344,6 +425,7 @@ async def update_student_face(
         import numpy as np
         from io import BytesIO
         from PIL import Image
+        from attendance_service.recognition import FaceQualityChecker, normalize_embedding
 
         conn = get_connection()
         cursor = conn.cursor()
@@ -365,109 +447,162 @@ async def update_student_face(
             conn.close()
             raise HTTPException(status_code=400, detail="No face image was uploaded")
 
+        quality_checker = FaceQualityChecker()
         mtcnn = get_mtcnn()
         facenet = get_facenet()
         device = _get_device()
 
-        sample_embeddings = []
+        sample_records = []
+        saved_photo_bytes = None
 
-        for upload in all_upload_files:
+        for idx, upload in enumerate(all_upload_files):
             image_bytes = await upload.read()
             if not image_bytes:
                 continue
 
-            img = Image.open(BytesIO(image_bytes)).convert("RGB")
+            if saved_photo_bytes is None:
+                saved_photo_bytes = image_bytes
 
-            boxes, probs = mtcnn.detect(img)
+            img = Image.open(BytesIO(image_bytes)).convert("RGB")
+            img_np = np.array(img)
+
+            boxes, probs, landmarks = mtcnn.detect(img, landmarks=True)
             if boxes is None or len(boxes) == 0:
                 conn.close()
                 raise HTTPException(
                     status_code=400,
-                    detail=f"No face detected in sample '{upload.filename}'. Ensure good lighting and face camera."
+                    detail=f"No face detected in sample #{idx + 1} ('{upload.filename}'). Ensure good lighting and face camera."
                 )
 
             if len(boxes) > 1:
                 conn.close()
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Multiple faces ({len(boxes)}) detected. Only one face must be in frame."
+                    detail=f"Multiple faces ({len(boxes)}) detected in sample #{idx + 1}. Only one face must be in frame."
                 )
 
             box = boxes[0]
-            if float(box[2] - box[0]) < 60 or float(box[3] - box[1]) < 60:
-                conn.close()
-                raise HTTPException(status_code=400, detail="Face is too small. Please move closer.")
+            primary_landmarks = landmarks[0] if (landmarks is not None and len(landmarks) > 0) else None
 
-            faces = mtcnn(img)
-            if faces is None or len(faces) == 0:
+            q_eval = quality_checker.evaluate(img_np, box, primary_landmarks)
+            if not q_eval["valid"]:
                 conn.close()
-                raise HTTPException(status_code=400, detail="Face alignment failed. Please center your face.")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Sample #{idx + 1} rejected: {q_eval['message']} (Score: {q_eval['quality_score']}). Please capture with proper lighting and direct camera alignment."
+                )
 
-            face = faces[0].unsqueeze(0).to(device)
+            aligned_faces = mtcnn.extract(img, boxes[:1], save_path=None)
+            if aligned_faces is None or len(aligned_faces) == 0:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Face alignment failed in sample #{idx + 1}. Please center your face.")
+
+            face = aligned_faces[0].unsqueeze(0).to(device)
             with torch.no_grad():
                 emb = facenet(face).cpu().numpy()[0]
 
-            emb = emb / (np.linalg.norm(emb) + 1e-9)
-            sample_embeddings.append(emb)
+            norm_emb = normalize_embedding(emb)
+            sample_records.append((norm_emb, q_eval["quality_score"]))
 
-        if len(sample_embeddings) == 0:
+        if len(sample_records) == 0:
             conn.close()
-            raise HTTPException(status_code=400, detail="Could not process any face samples")
+            raise HTTPException(status_code=400, detail="Could not process any valid face samples")
+
+        sample_embeddings = [r[0] for r in sample_records]
 
         if len(sample_embeddings) == 1:
             final_emb = sample_embeddings[0]
         else:
             final_emb = np.mean(sample_embeddings, axis=0)
-            final_emb = final_emb / (np.linalg.norm(final_emb) + 1e-9)
+            final_emb = normalize_embedding(final_emb)
 
-        # Check duplicate face against all other students
-        cursor.execute("SELECT student_id, name, embedding FROM students WHERE embedding IS NOT NULL AND student_id != ?", (student_id,))
-        existing_students = cursor.fetchall()
-        for ex_sid, ex_name, ex_blob in existing_students:
+        # Check duplicate face against all other students in face_embeddings
+        cursor.execute("""
+            SELECT s.student_id, s.name, fe.embedding 
+            FROM face_embeddings fe
+            JOIN students s ON fe.student_id = s.student_id
+            WHERE s.student_id != ? AND s.student_id != 'admin'
+        """, (student_id,))
+        existing_embeddings = cursor.fetchall()
+
+        for ex_sid, ex_name, ex_blob in existing_embeddings:
             try:
-                ex_raw = pickle.loads(ex_blob)
-                ex_emb = ex_raw[0] if hasattr(ex_raw, "__len__") and len(ex_raw) == 1 and hasattr(ex_raw[0], "__len__") else ex_raw
-                norm_ex = ex_emb / (np.linalg.norm(ex_emb) + 1e-9)
-                sim = float(np.dot(final_emb, norm_ex))
+                ex_emb = normalize_embedding(pickle.loads(ex_blob))
+                if ex_emb.ndim == 2:
+                    ex_emb = ex_emb[0]
+                sim = float(np.dot(final_emb, ex_emb))
                 if sim >= 0.70:
                     conn.close()
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! This face is already registered to '{ex_name}' ({ex_sid}) with {match_pct}% match. The same face cannot be registered under multiple student IDs."
+                        detail=f"⚠️ Duplicate Face Detected! This face matches '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
             except Exception:
                 continue
 
-        db_embedding_blob = pickle.dumps(np.array([final_emb]))
+        from datetime import datetime
+        now_iso = datetime.now().isoformat()
 
-        cursor.execute("UPDATE students SET embedding = ? WHERE student_id = ?", (db_embedding_blob, student_id))
+        # Save photo file to disk for UI profile display
+        photo_url = None
+        if saved_photo_bytes:
+            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+            os.makedirs(profiles_dir, exist_ok=True)
+            photo_filename = f"{student_id}.jpg"
+            photo_disk_path = os.path.join(profiles_dir, photo_filename)
+            with open(photo_disk_path, "wb") as f:
+                f.write(saved_photo_bytes)
+            photo_url = f"/uploads/profiles/{photo_filename}"
+
+        # Update representative centroid embedding and photo_url in students
+        db_centroid_blob = pickle.dumps(np.array([final_emb]))
+        if photo_url:
+            cursor.execute("UPDATE students SET embedding = ?, photo_url = ? WHERE student_id = ?", (db_centroid_blob, photo_url, student_id))
+        else:
+            cursor.execute("UPDATE students SET embedding = ? WHERE student_id = ?", (db_centroid_blob, student_id))
+
+        # Replace existing sample embeddings in face_embeddings table
+        cursor.execute("DELETE FROM face_embeddings WHERE student_id = ?", (student_id,))
+        for idx, (s_emb, q_score) in enumerate(sample_records):
+            cursor.execute(
+                "INSERT INTO face_embeddings (student_id, embedding, quality_score, created_at, capture_condition) VALUES (?, ?, ?, ?, ?)",
+                (student_id, pickle.dumps(s_emb), q_score, now_iso, f"sample_{idx + 1}")
+            )
+
         conn.commit()
         conn.close()
 
-        # Update cache
+        # Update cache file with multiple embeddings
+        os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+        cache = []
         if os.path.exists(CACHE_PATH):
             try:
                 with open(CACHE_PATH, "rb") as f:
                     cache = pickle.load(f)
-                cache = [s for s in cache if s.get("student_id") != student_id]
-                cache.append({
-                    "student_id": student_id,
-                    "name": student_name,
-                    "embedding": final_emb.tolist()
-                })
-                with open(CACHE_PATH, "wb") as f:
-                    pickle.dump(cache, f)
-            except Exception as e:
-                print(f"[WARN] Failed to update cache: {e}")
+            except Exception:
+                cache = []
+
+        cache = [s for s in cache if s.get("student_id") != student_id]
+        cache.append({
+            "student_id": student_id,
+            "name": student_name,
+            "embeddings": [emb.tolist() for emb in sample_embeddings],
+            "embedding": final_emb.tolist()
+        })
+
+        with open(CACHE_PATH, "wb") as f:
+            pickle.dump(cache, f)
 
         return {
-            "message": f"Face enrolled successfully for {student_id} with {len(sample_embeddings)} sample(s)",
+            "message": f"Face enrolled successfully for {student_id} with {len(sample_records)} verified sample(s)",
             "student_id": student_id,
-            "samples_processed": len(sample_embeddings)
+            "samples_processed": len(sample_records),
+            "average_quality": round(float(np.mean([r[1] for r in sample_records])), 2)
         }
+
 
     except HTTPException:
         raise

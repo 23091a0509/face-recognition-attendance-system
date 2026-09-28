@@ -230,9 +230,20 @@ export default function StudentsPage() {
                                             {/* Student Avatar + Name */}
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="h-8 w-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300 text-xs">
-                                                        {s.name ? s.name.charAt(0).toUpperCase() : "S"}
-                                                    </div>
+                                                    {s.photo_url ? (
+                                                        <img
+                                                            src={s.photo_url}
+                                                            alt={s.name}
+                                                            className="h-9 w-9 rounded-full object-cover border border-emerald-500/40 shadow-sm flex-shrink-0"
+                                                            onError={(e) => {
+                                                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300 text-xs flex-shrink-0">
+                                                            {s.name ? s.name.charAt(0).toUpperCase() : "S"}
+                                                        </div>
+                                                    )}
                                                     <div>
                                                         <span className="font-medium text-white block">{s.name}</span>
                                                         <span className="text-[11px] text-slate-500 font-mono">
@@ -343,22 +354,40 @@ export default function StudentsPage() {
                         </div>
 
                         <div className="text-center space-y-2 py-2">
-                            <div className="h-16 w-16 mx-auto rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center font-bold text-xl text-emerald-400">
-                                {selectedStudentForProfile.name?.charAt(0).toUpperCase()}
-                            </div>
+                            {selectedStudentForProfile.photo_url ? (
+                                <img
+                                    src={selectedStudentForProfile.photo_url}
+                                    alt={selectedStudentForProfile.name}
+                                    className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-xl shadow-emerald-500/20"
+                                />
+                            ) : (
+                                <div className="h-20 w-20 mx-auto rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center font-bold text-2xl text-emerald-400">
+                                    {selectedStudentForProfile.name?.charAt(0).toUpperCase()}
+                                </div>
+                            )}
                             <h4 className="text-lg font-bold text-white">{selectedStudentForProfile.name}</h4>
                             <p className="text-xs font-mono text-emerald-400">{selectedStudentForProfile.student_id}</p>
                         </div>
 
-                        <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-2 text-xs">
+                        <div className="bg-slate-900/60 rounded-xl p-3.5 border border-slate-800 space-y-2 text-xs">
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Department:</span>
                                 <span className="text-slate-200 font-semibold">{selectedStudentForProfile.department || "Computer Science"}</span>
                             </div>
+                            {selectedStudentForProfile.year && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Academic Year:</span>
+                                    <span className="text-slate-200 font-semibold">{selectedStudentForProfile.year}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Student Email:</span>
+                                <span className="text-slate-300 font-mono">{selectedStudentForProfile.email || `${selectedStudentForProfile.student_id.toLowerCase()}@institution.edu`}</span>
+                            </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Face Registration:</span>
                                 <span className="text-emerald-400 font-semibold">
-                                    {selectedStudentForProfile.has_face ? "🟢 Registered" : "🔴 Not Registered"}
+                                    {selectedStudentForProfile.has_face ? "🟢 Biometric Active" : "🔴 Not Registered"}
                                 </span>
                             </div>
                             <div className="flex justify-between">

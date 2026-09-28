@@ -3,9 +3,13 @@ import {
     getTodayAttendance,
     markAttendance,
     recognizeFrame,
+    getCurrentSession,
+    createSession,
+    endSession,
     type TodayAttendance,
     type FrameRecognitionResult,
-    type DetectedFaceInfo
+    type DetectedFaceInfo,
+    type AttendanceSession
 } from "../../services/attendance.service";
 import { getAllStudents, type Student } from "../../services/students";
 import { exportAttendanceCsv } from "../../utils/exportCsv";
@@ -22,6 +26,17 @@ export default function AttendancePage() {
     const [viewMode, setViewMode] = useState<ViewMode>("SPLIT");
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+    // Active Attendance Session State
+    const [currentSession, setCurrentSession] = useState<AttendanceSession | null>(null);
+    const [sessionRemainingSecs, setSessionRemainingSecs] = useState<number>(0);
+    const [sessionEnding, setSessionEnding] = useState<boolean>(false);
+    const [showNewSessionModal, setShowNewSessionModal] = useState<boolean>(false);
+    const [newSessionForm, setNewSessionForm] = useState({
+        title: "Daily Academic Session",
+        start_time: "09:00",
+        end_time: "13:00"
+    });
     
     // Live Recognition Modal State
     const [showScannerModal, setShowScannerModal] = useState(false);
@@ -61,12 +76,15 @@ export default function AttendancePage() {
 
     const load = useCallback(async () => {
         try {
-            const [attendanceRes, studentsRes] = await Promise.all([
+            const [attendanceRes, studentsRes, sessionRes] = await Promise.all([
                 getTodayAttendance(),
-                getAllStudents()
+                getAllStudents(),
+                getCurrentSession()
             ]);
             setData(attendanceRes);
             setStudents(studentsRes);
+            setCurrentSession(sessionRes.session);
+            setSessionRemainingSecs(sessionRes.session.seconds_remaining);
             if (studentsRes.length > 0 && !selectedStudentToRecognize) {
                 setSelectedStudentToRecognize(studentsRes[0].student_id);
             }
@@ -79,9 +97,52 @@ export default function AttendancePage() {
 
     useEffect(() => {
         load();
-        const interval = setInterval(load, 4000);
+        const interval = setInterval(load, 5000);
         return () => clearInterval(interval);
     }, [load]);
+
+    // Countdown interval for session
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setSessionRemainingSecs((prev) => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    function formatSessionCountdown(secs: number) {
+        if (secs <= 0) return "00:00:00 remaining";
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")} remaining`;
+    }
+
+    async function handleEndSession() {
+        if (!currentSession) return;
+        if (!confirm(`End session "${currentSession.title}" now? This will finalize all student attendance according to duration & halves rules.`)) return;
+        try {
+            setSessionEnding(true);
+            const res = await endSession(currentSession.id);
+            showNotification(res.message || "Session ended and evaluated!");
+            await load();
+        } catch (err: any) {
+            showNotification(err.response?.data?.detail || "Failed to end session");
+        } finally {
+            setSessionEnding(false);
+        }
+    }
+
+    async function handleCreateSessionSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        try {
+            await createSession(newSessionForm);
+            showNotification("✅ New session created and activated!");
+            setShowNewSessionModal(false);
+            await load();
+        } catch (err: any) {
+            showNotification(err.response?.data?.detail || "Failed to create session");
+        }
+    }
 
     function showNotification(msg: string) {
         setToastMessage(msg);
@@ -330,7 +391,7 @@ export default function AttendancePage() {
     const totalStudents = data?.total_students || students.length || records.length || 0;
 
     const presentRecords = useMemo(() => {
-        return records.filter((r) => r.status === "Present" || r.status === "Late");
+        return records.filter((r) => r.status === "Present" || r.status === "Late" || r.status === "Full Day" || r.status === "Half Day");
     }, [records]);
 
     const absentRecords = useMemo(() => {
@@ -338,6 +399,8 @@ export default function AttendancePage() {
     }, [records]);
 
     const presentCount = data?.total_present !== undefined ? data.total_present : presentRecords.length;
+    const fullDayCount = data?.total_full_day !== undefined ? data.total_full_day : records.filter((r) => r.status === "Full Day").length;
+    const halfDayCount = data?.total_half_day !== undefined ? data.total_half_day : records.filter((r) => r.status === "Half Day").length;
     const lateCount = data?.total_late !== undefined ? data.total_late : records.filter((r) => r.status === "Late").length;
     const absentCount = data?.total_absent !== undefined ? data.total_absent : absentRecords.length;
     const rate = totalStudents > 0 ? ((presentCount / totalStudents) * 100).toFixed(1) : "0.0";
@@ -434,6 +497,128 @@ export default function AttendancePage() {
                 </div>
             </div>
 
+            {/* ⏰ Attendance Session Control Banner */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl text-emerald-400">
+                        ⏰
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-sm font-bold text-white tracking-wide">
+                                {currentSession?.title || "Daily Academic Session"}
+                            </h2>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                currentSession?.status === "active" && sessionRemainingSecs > 0
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                    : "bg-slate-800 text-slate-400 border-slate-700"
+                            }`}>
+                                {currentSession?.status === "active" && sessionRemainingSecs > 0 ? "SESSION ACTIVE" : "SESSION CONCLUDED"}
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
+                            Timing: {currentSession?.start_time || "09:00 AM"} – {currentSession?.end_time || "01:00 PM"}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                    {currentSession?.status === "active" && sessionRemainingSecs > 0 ? (
+                        <>
+                            <div className="px-3.5 py-1.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-400 font-mono text-sm font-bold shadow-inner">
+                                {formatSessionCountdown(sessionRemainingSecs)}
+                            </div>
+                            <button
+                                onClick={handleEndSession}
+                                disabled={sessionEnding}
+                                className="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                            >
+                                {sessionEnding ? "Finalizing Attendance..." : "End Session & Finalize Statuses"}
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            onClick={() => setShowNewSessionModal(true)}
+                            className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20"
+                        >
+                            + Start New Session
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Modal for creating a new session */}
+            {showNewSessionModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <h3 className="text-base font-bold text-white">Create Attendance Session</h3>
+                            <button
+                                onClick={() => setShowNewSessionModal(false)}
+                                className="text-slate-400 hover:text-white cursor-pointer"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateSessionSubmit} className="space-y-4 text-xs">
+                            <div>
+                                <label className="block text-slate-300 font-semibold mb-1">Session Title</label>
+                                <input
+                                    type="text"
+                                    value={newSessionForm.title}
+                                    onChange={(e) => setNewSessionForm({ ...newSessionForm, title: e.target.value })}
+                                    className="w-full rounded-lg bg-slate-950 border border-slate-800 p-2.5 text-white"
+                                    required
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-slate-300 font-semibold mb-1">Start Time</label>
+                                    <input
+                                        type="time"
+                                        value={newSessionForm.start_time}
+                                        onChange={(e) => setNewSessionForm({ ...newSessionForm, start_time: e.target.value })}
+                                        className="w-full rounded-lg bg-slate-950 border border-slate-800 p-2.5 text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-slate-300 font-semibold mb-1">End Time</label>
+                                    <input
+                                        type="time"
+                                        value={newSessionForm.end_time}
+                                        onChange={(e) => setNewSessionForm({ ...newSessionForm, end_time: e.target.value })}
+                                        className="w-full rounded-lg bg-slate-950 border border-slate-800 p-2.5 text-white"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                                <span className="font-bold text-slate-300 block">Attendance Rule:</span>
+                                <div>• Full Day: Verified across both halves or ≥ 75% duration</div>
+                                <div>• Half Day: Present first half only or 40% - 74% duration</div>
+                                <div>• Absent: Less than 40% duration or never recognized</div>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewSessionModal(false)}
+                                    className="flex-1 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold cursor-pointer shadow-lg shadow-emerald-500/20"
+                                >
+                                    Activate Session
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Header Metric Banner */}
             <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -443,19 +628,23 @@ export default function AttendancePage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <span className="text-base font-bold text-white tracking-tight">{todayDate}</span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping" />
-                                Live Session
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                Today's Roster
                             </span>
                         </div>
                         <p className="text-xs text-slate-400">Total Enrolled: {totalStudents} Students</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 sm:gap-6 text-xs text-center md:text-left">
+                <div className="grid grid-cols-5 gap-2 sm:gap-4 text-xs text-center md:text-left">
                     <div className="cursor-pointer" onClick={() => setViewMode("PRESENT")}>
-                        <span className="text-slate-400 block text-[11px]">🟢 Present</span>
-                        <span className="text-lg sm:text-xl font-bold text-emerald-400">{presentCount}</span>
+                        <span className="text-slate-400 block text-[11px]">🟢 Full Day</span>
+                        <span className="text-lg sm:text-xl font-bold text-emerald-400">{fullDayCount}</span>
+                    </div>
+                    <div className="cursor-pointer" onClick={() => setViewMode("PRESENT")}>
+                        <span className="text-slate-400 block text-[11px]">🟢🔴 Half Day</span>
+                        <span className="text-lg sm:text-xl font-bold text-amber-300">{halfDayCount}</span>
                     </div>
                     <div className="cursor-pointer" onClick={() => setViewMode("ABSENT")}>
                         <span className="text-slate-400 block text-[11px]">🔴 Absent</span>
@@ -581,16 +770,26 @@ export default function AttendancePage() {
                                                         </span>
                                                     </td>
                                                     <td className="px-3 sm:px-4 py-3">
-                                                        <span
-                                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                                                                r.status === "Late"
-                                                                    ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                                                                    : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                                            }`}
-                                                        >
-                                                            <span className={`h-1.5 w-1.5 rounded-full ${r.status === "Late" ? "bg-amber-400" : "bg-emerald-400"}`} />
-                                                            {r.status || "Present"}
-                                                        </span>
+                                                        {r.status === "Half Day" ? (
+                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40">
+                                                                <span className="flex items-center -space-x-1">
+                                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                                                </span>
+                                                                Half Day
+                                                            </span>
+                                                        ) : (
+                                                            <span
+                                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                                                    r.status === "Late"
+                                                                        ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                                                                        : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                                                }`}
+                                                            >
+                                                                <span className={`h-1.5 w-1.5 rounded-full ${r.status === "Late" ? "bg-amber-400" : "bg-emerald-400"}`} />
+                                                                {r.status || "Full Day"}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))
@@ -729,10 +928,20 @@ export default function AttendancePage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3.5">
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                                                        {r.status || "Present"}
-                                                    </span>
+                                                    {r.status === "Half Day" ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40">
+                                                            <span className="flex items-center -space-x-1">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                                            </span>
+                                                            Half Day
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                            {r.status || "Full Day"}
+                                                        </span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))
@@ -850,18 +1059,28 @@ export default function AttendancePage() {
                                                 {r.department || "General"}
                                             </td>
                                             <td className="px-4 py-3.5">
-                                                <span
-                                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                                        r.status === "Late"
-                                                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                                            : r.status === "Present"
-                                                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                                            : "bg-red-500/10 text-red-400 border border-red-500/20"
-                                                    }`}
-                                                >
-                                                    <span className={`h-1.5 w-1.5 rounded-full ${r.status === "Late" ? "bg-amber-400" : r.status === "Present" ? "bg-emerald-400" : "bg-red-400"}`} />
-                                                    {r.status || "Absent"}
-                                                </span>
+                                                {r.status === "Half Day" ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40">
+                                                        <span className="flex items-center -space-x-1">
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                                        </span>
+                                                        Half Day
+                                                    </span>
+                                                ) : (
+                                                    <span
+                                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                                            r.status === "Late"
+                                                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                                                : r.status === "Present" || r.status === "Full Day"
+                                                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                                                : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                        }`}
+                                                    >
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${r.status === "Late" ? "bg-amber-400" : (r.status === "Present" || r.status === "Full Day") ? "bg-emerald-400" : "bg-red-400"}`} />
+                                                        {r.status || "Absent"}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3.5 font-mono text-xs text-slate-300">
                                                 {r.time}

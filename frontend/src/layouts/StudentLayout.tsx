@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { getMe } from "../services/auth.service";
 
 export default function StudentLayout() {
     const { logout, studentId } = useAuth();
+    const [profile, setProfile] = useState<{ name?: string; photo_url?: string; department?: string } | null>(null);
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [isPinned, setIsPinned] = useState(false);
+
+    useEffect(() => {
+        getMe().then((data) => {
+            if (data) setProfile(data);
+        }).catch(() => {});
+    }, [studentId]);
 
     // Auto-sidebar: expands automatically on hover or when pinned on desktop
     const isExpanded = isPinned || isHovered;
@@ -197,16 +205,27 @@ export default function StudentLayout() {
                     {expanded ? (
                         <>
                             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#0e1726]/80 border border-slate-800 shadow-inner">
-                                <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-xs font-black text-emerald-400 border border-emerald-500/40 flex-shrink-0 shadow-sm">
-                                    S
+                                <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-xs font-black text-emerald-400 border border-emerald-500/40 flex-shrink-0 shadow-sm">
+                                    {profile?.photo_url ? (
+                                        <img
+                                            src={profile.photo_url}
+                                            alt={profile.name || studentId || "Student"}
+                                            className="h-full w-full object-cover"
+                                            onError={(e) => {
+                                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <span>{(profile?.name || studentId || "S").charAt(0).toUpperCase()}</span>
+                                    )}
                                     <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0b1120] animate-pulse" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-bold text-slate-200 truncate">
-                                        {studentId || "Student"}
+                                        {profile?.name || studentId || "Student"}
                                     </p>
                                     <p className="text-[10px] text-emerald-400 font-mono truncate flex items-center gap-1">
-                                        <span>Verified Face ID</span>
+                                        <span>{profile?.department || "Verified Face ID"}</span>
                                     </p>
                                 </div>
                             </div>
@@ -224,10 +243,21 @@ export default function StudentLayout() {
                     ) : (
                         <div className="flex flex-col items-center gap-2">
                             <div
-                                title={`Logged in: ${studentId || "Student"}`}
-                                className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-xs font-black text-emerald-400 border border-emerald-500/30 cursor-pointer"
+                                title={`Logged in: ${profile?.name || studentId || "Student"}`}
+                                className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden bg-emerald-500/20 text-xs font-black text-emerald-400 border border-emerald-500/30 cursor-pointer"
                             >
-                                S
+                                {profile?.photo_url ? (
+                                    <img
+                                        src={profile.photo_url}
+                                        alt="Profile"
+                                        className="h-full w-full object-cover"
+                                        onError={(e) => {
+                                            (e.currentTarget as HTMLElement).style.display = 'none';
+                                        }}
+                                    />
+                                ) : (
+                                    <span>{(profile?.name || studentId || "S").charAt(0).toUpperCase()}</span>
+                                )}
                                 <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0b1120]" />
                             </div>
                             <button

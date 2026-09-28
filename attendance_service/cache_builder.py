@@ -28,10 +28,16 @@ def build_cache():
             res.raise_for_status()
             data = res.json()
 
+            embs = data.get("embeddings") or []
+            if not embs and data.get("embedding"):
+                embs = [data["embedding"]]
+
             cache.append({
                 "student_id": data["student_id"],
                 "name": data["name"],
-                "embedding": data["embedding"]
+                "department": s.get("department", "General"),
+                "embedding": data.get("embedding"),
+                "embeddings": embs
             })
         except Exception as e:
             print(f"[WARN] Skipping student {sid} because fetching embedding failed: {e}")

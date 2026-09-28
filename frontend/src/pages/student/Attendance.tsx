@@ -184,11 +184,37 @@ export default function StudentAttendance() {
 
         const record = recordByDate.get(dateStr);
         if (record) {
+            const isHalfDay = record.status === "Half Day" || record.status === "half_day";
+            const isAbsent = record.status === "Absent";
+
+            if (isHalfDay) {
+                return {
+                    status: "Half Day",
+                    time: record.time,
+                    record,
+                    label: "Half Day",
+                    dotColor: "split-green-red",
+                    // Two-tone green and red color styling as requested
+                    cellBorder: "border-amber-500/60 bg-gradient-to-br from-emerald-950/40 via-amber-950/20 to-rose-950/40 text-amber-200",
+                };
+            }
+
+            if (isAbsent) {
+                return {
+                    status: "Absent",
+                    time: record.time,
+                    record,
+                    label: "Absent",
+                    dotColor: "bg-red-400 shadow-sm shadow-red-400/50",
+                    cellBorder: "border-red-500/30 bg-red-950/10 text-red-300",
+                };
+            }
+
             return {
-                status: "Present",
+                status: "Full Day",
                 time: record.time,
                 record,
-                label: "Present",
+                label: "Full Day",
                 dotColor: "bg-emerald-400 shadow-sm shadow-emerald-400/50",
                 cellBorder: "border-emerald-500/40 bg-emerald-950/20 text-emerald-300",
             };
@@ -402,9 +428,15 @@ export default function StudentAttendance() {
                                             {item.dayNumber}
                                         </span>
 
-                                        {/* Small Status Dot Indicator */}
+                                        {/* Status Dot Indicator */}
                                         <div className="flex items-center gap-1 mt-0.5">
-                                            {statusInfo?.status === "Present" && (
+                                            {statusInfo?.status === "Half Day" && (
+                                                <div className="flex items-center -space-x-0.5" title="Half Day (Green & Red)">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80" />
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/80" />
+                                                </div>
+                                            )}
+                                            {statusInfo?.status === "Full Day" && (
                                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80" />
                                             )}
                                             {statusInfo?.status === "Absent" && (
@@ -423,7 +455,14 @@ export default function StudentAttendance() {
                         <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
                             <div className="flex flex-wrap items-center gap-3">
                                 <span className="flex items-center gap-1">
-                                    <span className="h-2 w-2 rounded-full bg-emerald-400" /> <span>Present</span>
+                                    <span className="h-2 w-2 rounded-full bg-emerald-400" /> <span>Full Day</span>
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <span className="flex items-center -space-x-1">
+                                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                    </span>
+                                    <span className="text-amber-300 font-semibold">Half Day (Green & Red)</span>
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <span className="h-2 w-2 rounded-full bg-red-400" /> <span>Absent</span>
@@ -470,19 +509,51 @@ export default function StudentAttendance() {
                                         </div>
                                         <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
                                             <span className="text-slate-400">Status:</span>
-                                            <span className="font-bold text-emerald-400 flex items-center gap-1">
-                                                <span>🟢</span> Present
-                                            </span>
+                                            {selectedDayStatus.status === "Half Day" ? (
+                                                <span className="px-2.5 py-0.5 rounded-full font-bold text-xs bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shadow-sm">
+                                                    <span className="flex items-center -space-x-1">
+                                                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                                                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                                    </span>
+                                                    Half Day
+                                                </span>
+                                            ) : selectedDayStatus.status === "Full Day" ? (
+                                                <span className="font-bold text-emerald-400 flex items-center gap-1">
+                                                    <span>🟢</span> Full Day Present
+                                                </span>
+                                            ) : (
+                                                <span className="font-bold text-red-400 flex items-center gap-1">
+                                                    <span>🔴</span> {selectedDayStatus.record.status || "Absent"}
+                                                </span>
+                                            )}
                                         </div>
+                                        {selectedDayStatus.record.minutes_attended !== undefined && selectedDayStatus.record.minutes_attended > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-slate-400">Time Attended:</span>
+                                                <span className="font-mono font-bold text-emerald-400">
+                                                    {selectedDayStatus.record.minutes_attended} mins
+                                                </span>
+                                            </div>
+                                        )}
+                                        {selectedDayStatus.record.reason && (
+                                            <div className="flex items-start justify-between gap-2 pt-1 border-t border-slate-800/40">
+                                                <span className="text-slate-400">Evaluation:</span>
+                                                <span className="text-slate-300 text-right text-[11px] font-sans">
+                                                    {selectedDayStatus.record.reason}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="flex items-center justify-between">
                                             <span className="text-slate-400">Verification:</span>
                                             <span className="font-bold text-white flex items-center gap-1">
-                                                <span className="text-emerald-400">✓</span> Face + Liveness
+                                                <span className="text-emerald-400">✓</span> {selectedDayStatus.record.method || "Face AI"}
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between">
                                             <span className="text-slate-400">Confidence:</span>
-                                            <span className="font-mono font-bold text-emerald-400">97%</span>
+                                            <span className="font-mono font-bold text-emerald-400">
+                                                {selectedDayStatus.record.confidence ? `${selectedDayStatus.record.confidence}%` : "98.0%"}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -627,17 +698,31 @@ export default function StudentAttendance() {
                                                 </div>
                                             </td>
                                             <td className="px-5 py-3.5">
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                                    <span>🟢</span> Present
-                                                </span>
+                                                {r.status === "Half Day" ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-emerald-500/20 via-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40">
+                                                        <span className="flex items-center -space-x-1">
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                                        </span>
+                                                        Half Day
+                                                    </span>
+                                                ) : r.status === "Absent" ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                                        <span>🔴</span> Absent
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                                        <span>🟢</span> Full Day
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-5 py-3.5 text-xs">
                                                 <span className="inline-flex items-center gap-1 text-slate-200 font-medium">
-                                                    <span className="text-emerald-400 font-bold">✓</span> Face + Liveness
+                                                    <span className="text-emerald-400 font-bold">✓</span> {r.method || "Face AI"}
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3.5 font-mono text-xs font-bold text-emerald-400">
-                                                97%
+                                                {r.confidence ? `${r.confidence}%` : "98%"}
                                             </td>
                                             <td className="px-5 py-3.5 text-right">
                                                 <button
@@ -646,9 +731,10 @@ export default function StudentAttendance() {
                                                             student_id: studentInfo?.student_id || "CS001",
                                                             name: studentInfo?.name,
                                                             date: r.date,
-                                                            time: r.time || "09:42:31",
-                                                            status: "Present",
-                                                            confidence: 97,
+                                                            time: r.time || "09:00:00",
+                                                            status: (r.status as any) || "Present",
+                                                            confidence: r.confidence || 98,
+                                                            method: r.method || "Face AI",
                                                         })
                                                     }
                                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 font-bold text-xs transition-all shadow-sm cursor-pointer"

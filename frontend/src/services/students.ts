@@ -4,6 +4,7 @@ export interface Student {
     student_id: string;
     name: string;
     department: string;
+    photo_url?: string | null;
     has_face?: boolean;
     face_status?: "registered" | "needs_update" | "not_registered";
     total_present?: number;
