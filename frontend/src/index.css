@@ -1,8 +1,74 @@
 @import "tailwindcss";
 
-/* Optional global styles */
-html,
-body,
-#root {
-  height: 100%;
+@layer base {
+  :root {
+    --bg-page: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #64748B;
+    --primary-accent: #4F46E5;
+    --accent-light: #EEF2FF;
+    --border-color: #E5E7EB;
+    --color-success: #16A34A;
+    --color-error: #DC2626;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    background-color: #F8FAFC;
+    color: #111827;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  /* Custom scrollbar for modern enterprise look */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+  }
+}
+
+/* Subtle scanning beam animation for VERIDEX camera HUD */
+@keyframes veridexScan {
+  0% {
+    top: 5%;
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    top: 95%;
+    opacity: 0.2;
+  }
+}
+
+.animate-scan-beam {
+  animation: veridexScan 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes pulseSubtle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s ease-in-out infinite;
 }

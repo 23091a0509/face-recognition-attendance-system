@@ -17,6 +17,8 @@ import StudentDashboard from "../pages/student/Dashboard";
 import StudentAttendance from "../pages/student/Attendance";
 import StudentWebcam from "../pages/student/Webcam";
 import StudentNotifications from "../pages/student/Notifications";
+import StudentProfile from "../pages/student/Profile";
+import StudentSettings from "../pages/student/Settings";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
@@ -73,6 +75,8 @@ export const router = createBrowserRouter([
       { path: "webcam", element: <StudentWebcam /> },
       { path: "attendance", element: <StudentAttendance /> },
       { path: "notifications", element: <StudentNotifications /> },
+      { path: "profile", element: <StudentProfile /> },
+      { path: "settings", element: <StudentSettings /> },
     ],
   },
 
