@@ -142,8 +142,8 @@ export default function Login() {
                 <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-800/50 shadow-2xl p-8">
 
                     <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-white mb-2">
-                            Face Attendance Software
+                        <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
+                            AttendVision
                         </h1>
                         <p className="text-2xl font-semibold text-white mb-1">
                             Welcome Back 👋

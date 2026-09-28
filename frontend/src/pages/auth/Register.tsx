@@ -43,7 +43,7 @@ export default function Register() {
                             Create Account
                         </h1>
                         <p className="text-sm text-slate-400">
-                            Join the Face Attendance System
+                            Join AttendVision
                         </p>
                     </div>
 

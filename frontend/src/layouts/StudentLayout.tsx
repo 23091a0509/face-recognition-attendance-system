@@ -78,7 +78,7 @@ export default function StudentLayout() {
                             {expanded && (
                                 <div className="overflow-hidden transition-all duration-200">
                                     <h2 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5 truncate">
-                                        FaceAttend
+                                        AttendVision
                                         <span className="text-[10px] font-mono text-emerald-400 font-normal px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20">
                                             Student
                                         </span>
