@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import type { Student } from "../../services/students";
 import { getAllStudents, deleteStudent } from "../../services/students";
+import { resolveImageUrl } from "../../services/api";
 import AddStudentModal from "../../components/admin/AddStudentModal";
 
 export default function StudentsPage() {
@@ -218,7 +219,7 @@ export default function StudentsPage() {
                                     <div className="flex items-center gap-3">
                                         {s.photo_url ? (
                                             <img
-                                                src={s.photo_url}
+                                                src={resolveImageUrl(s.photo_url)}
                                                 alt={s.name}
                                                 className="h-11 w-11 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
                                                 onError={(e) => {
@@ -334,7 +335,7 @@ export default function StudentsPage() {
                                                 <div className="flex items-center gap-3">
                                                     {s.photo_url ? (
                                                         <img
-                                                            src={s.photo_url}
+                                                            src={resolveImageUrl(s.photo_url)}
                                                             alt={s.name}
                                                             className="h-9 w-9 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
                                                             onError={(e) => {
@@ -455,7 +456,7 @@ export default function StudentsPage() {
                         <div className="text-center space-y-2 py-2">
                             {selectedStudentForProfile.photo_url ? (
                                 <img
-                                    src={selectedStudentForProfile.photo_url}
+                                    src={resolveImageUrl(selectedStudentForProfile.photo_url)}
                                     alt={selectedStudentForProfile.name}
                                     className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
                                 />

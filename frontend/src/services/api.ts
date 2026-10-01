@@ -42,4 +42,16 @@ api.interceptors.response.use(
   }
 );
 
+export function resolveImageUrl(url?: string | null): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  const apiBase = import.meta.env.VITE_API_URL || "";
+  if (apiBase) {
+    return `${apiBase.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+  }
+  return url;
+}
+
 export default api;

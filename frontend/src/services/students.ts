@@ -39,4 +39,16 @@ export async function updateStudentFace(studentId: string, formData: FormData) {
         }
     });
     return res.data;
-}
+}
+
+export async function uploadProfilePicture(studentId: string, file: File): Promise<{ success: boolean; photo_url: string; message: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post(`/students/${studentId}/profile-picture`, formData, {
+        headers: {
+            "Content-Type": "multipart/form-data"
+        }
+    });
+    return res.data;
+}
+

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
     getStudentAttendanceStats,
@@ -7,6 +7,8 @@ import {
     type AttendanceStats,
 } from "../../services/attendance.service";
 import { getMe } from "../../services/auth.service";
+import { uploadProfilePicture } from "../../services/students";
+import { resolveImageUrl } from "../../services/api";
 import {
     ResponsiveContainer,
     AreaChart,
@@ -41,6 +43,46 @@ export default function StudentDashboard() {
     // Interactive Attendance Forecast Calculator state
     const [upcomingSessions, setUpcomingSessions] = useState<number>(10);
     const [plannedToAttend, setPlannedToAttend] = useState<number>(8);
+
+    // Profile photo upload state
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [photoUploadSuccess, setPhotoUploadSuccess] = useState(false);
+    const [photoUploadError, setPhotoUploadError] = useState("");
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    async function handlePhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !studentInfo?.student_id) return;
+        if (!file.type.startsWith("image/")) {
+            setPhotoUploadError("Please select an image file (PNG, JPEG, or WebP).");
+            setTimeout(() => setPhotoUploadError(""), 4000);
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            setPhotoUploadError("Image size must be less than 8 MB.");
+            setTimeout(() => setPhotoUploadError(""), 4000);
+            return;
+        }
+
+        try {
+            setUploadingPhoto(true);
+            setPhotoUploadError("");
+            const res = await uploadProfilePicture(studentInfo.student_id, file);
+            if (res.success && res.photo_url) {
+                setStudentInfo(prev => prev ? { ...prev, photo_url: res.photo_url } : null);
+                setPhotoUploadSuccess(true);
+                setTimeout(() => setPhotoUploadSuccess(false), 4000);
+                window.dispatchEvent(new CustomEvent("profilePhotoUpdated", { detail: { photo_url: res.photo_url } }));
+            }
+        } catch (err: any) {
+            console.error("Failed to upload profile picture:", err);
+            setPhotoUploadError(err.response?.data?.detail || "Failed to upload photo. Please try again.");
+            setTimeout(() => setPhotoUploadError(""), 5000);
+        } finally {
+            setUploadingPhoto(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    }
 
     useEffect(() => {
         async function load() {
@@ -363,25 +405,94 @@ export default function StudentDashboard() {
 
             {/* Student Profile Card */}
             <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-5 md:p-6 shadow-sm">
+                {photoUploadSuccess && (
+                    <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between animate-fade-in shadow-xs">
+                        <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Profile picture updated successfully!</span>
+                        </div>
+                        <button onClick={() => setPhotoUploadSuccess(false)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer font-bold text-xs">✕</button>
+                    </div>
+                )}
+                {photoUploadError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between animate-fade-in shadow-xs">
+                        <span>⚠️ {photoUploadError}</span>
+                        <button onClick={() => setPhotoUploadError("")} className="text-rose-700 hover:text-rose-900 cursor-pointer font-bold text-xs">✕</button>
+                    </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                    {/* Student Photo with Face Registered Ring */}
-                    <div className="relative flex-shrink-0">
-                        {studentInfo?.photo_url ? (
-                            <img
-                                src={studentInfo.photo_url}
-                                alt={studentInfo?.name || "Student Profile"}
-                                className="h-28 w-28 rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
-                                onError={(e) => {
-                                    (e.currentTarget as HTMLElement).style.display = 'none';
-                                }}
-                            />
-                        ) : (
-                            <div className="h-28 w-28 rounded-2xl bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center text-emerald-700 font-extrabold text-4xl shadow-sm">
-                                {displayName.charAt(0).toUpperCase()}
-                            </div>
-                        )}
-                        <span className="absolute -bottom-2.5 inset-x-0 mx-auto w-max px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-sm flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse"></span>
+                    {/* Student Photo with Interactive Upload */}
+                    <div className="relative flex-shrink-0 flex flex-col items-center">
+                        <div className="relative group/avatar h-28 w-28 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md bg-slate-100 flex items-center justify-center">
+                            {studentInfo?.photo_url ? (
+                                <img
+                                    src={resolveImageUrl(studentInfo.photo_url)}
+                                    alt={studentInfo?.name || "Student Profile"}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                    }}
+                                />
+                            ) : (
+                                <div className="h-full w-full bg-emerald-50 flex items-center justify-center text-emerald-700 font-extrabold text-4xl shadow-sm">
+                                    {displayName.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+
+                            {/* Hover Camera Overlay for Desktop */}
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploadingPhoto}
+                                title="Click to change profile picture"
+                                className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover/avatar:opacity-100 focus:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white cursor-pointer"
+                            >
+                                {uploadingPhoto ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span className="text-[10px] font-bold">Uploading...</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        <span className="text-[10px] font-bold">Change</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Mobile Friendly Change Photo Button */}
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploadingPhoto}
+                            className="mt-2.5 w-full py-1 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                        >
+                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            <span>{uploadingPhoto ? "Uploading..." : "Upload Photo"}</span>
+                        </button>
+
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/jpg"
+                            className="hidden"
+                            onChange={handlePhotoSelected}
+                        />
+
+                        <span className="mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             Face Registered
                         </span>
                     </div>

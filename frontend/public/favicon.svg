@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bgGrad)" />
+
+  <!-- Corner Scanner Reticles -->
+  <!-- Top-Left -->
+  <path d="M14 24 V18 A4 4 0 0 1 18 14 H24" fill="none" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" />
+  <!-- Top-Right -->
+  <path d="M40 14 H46 A4 4 0 0 1 50 18 V24" fill="none" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" />
+  <!-- Bottom-Left -->
+  <path d="M14 40 V46 A4 4 0 0 0 18 50 H24" fill="none" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" />
+  <!-- Bottom-Right -->
+  <path d="M40 50 H46 A4 4 0 0 0 50 46 V40" fill="none" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Center Face Silhouette -->
+  <!-- Head -->
+  <circle cx="32" cy="27" r="7.5" fill="#ffffff" />
+  <!-- Shoulders -->
+  <path d="M21 44 C21 38 25 36 32 36 C39 36 43 38 43 44" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Verified Indicator Badge -->
+  <circle cx="46" cy="46" r="6" fill="url(#glowGrad)" stroke="#ffffff" stroke-width="2" />
+  <path d="M43.5 46 L45.2 47.7 L48.8 44.2" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

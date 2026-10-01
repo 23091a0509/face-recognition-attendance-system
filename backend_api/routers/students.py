@@ -1,4 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from pydantic import BaseModel
+from typing import Optional
 import pickle
 from backend.database import get_connection
 import sqlite3
@@ -620,5 +622,134 @@ async def update_student_face(
     except Exception as e:
         logger.error("[UPDATE-FACE] Error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----------------------------------------------------------------------
+# 📸 Student Profile Picture Management & Storage Bucket Integration
+# ----------------------------------------------------------------------
+class Base64PhotoRequest(BaseModel):
+    image: str
+
+
+def _process_and_save_profile_picture(student_id: str, raw_bytes: bytes, current_user: dict) -> dict:
+    import time
+    from io import BytesIO
+    from PIL import Image, ImageOps
+
+    user_role = current_user.get("role")
+    logged_in_sid = (current_user.get("student_id") or "").strip()
+
+    # Access control: Student can only update their own profile, admin can update any
+    if user_role != "admin":
+        if not logged_in_sid or logged_in_sid.upper() != student_id.strip().upper():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access Denied: You can only upload a profile photo for your own account ({logged_in_sid})."
+            )
+
+    clean_sid = student_id.strip()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM students WHERE student_id = ?", (clean_sid,))
+    student_row = cursor.fetchone()
+    if not student_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Student {clean_sid} not found")
+
+    if len(raw_bytes) > 8 * 1024 * 1024:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Image file exceeds 8 MB size limit.")
+
+    try:
+        img = Image.open(BytesIO(raw_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+
+        # Crop to square center & resize to 400x400
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        img_cropped = img.crop((left, top, left + min_dim, top + min_dim))
+        img_resized = img_cropped.resize((400, 400), Image.Resampling.LANCZOS)
+
+        out_buffer = BytesIO()
+        img_resized.save(out_buffer, format="JPEG", quality=90, optimize=True)
+        processed_bytes = out_buffer.getvalue()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
+
+    # 1. Local / cloud container persistence
+    profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+    os.makedirs(profiles_dir, exist_ok=True)
+    photo_filename = f"{clean_sid}.jpg"
+    photo_path = os.path.join(profiles_dir, photo_filename)
+    with open(photo_path, "wb") as f:
+        f.write(processed_bytes)
+
+    # 2. Cloud Storage Bucket path
+    photo_url = f"/uploads/profiles/{photo_filename}"
+
+    # Update database record
+    cursor.execute("UPDATE students SET photo_url = ? WHERE student_id = ?", (photo_url, clean_sid))
+    conn.commit()
+    conn.close()
+
+    # Emit notification
+    try:
+        from backend_api.routers.notifications import create_notification
+        create_notification(
+            student_id=clean_sid,
+            title="Profile Photo Updated 📸",
+            message=f"Your profile picture has been successfully updated.",
+            notif_type="profile_update",
+            severity="success",
+            action_url="/student/dashboard"
+        )
+    except Exception:
+        pass
+
+    versioned_url = f"{photo_url}?v={int(time.time())}"
+
+    return {
+        "success": True,
+        "message": "Profile picture updated successfully",
+        "student_id": clean_sid,
+        "photo_url": versioned_url
+    }
+
+
+@router.post("/{student_id}/profile-picture")
+async def upload_profile_picture_multipart(
+    student_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload student profile picture using standard multipart form-data."""
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+    return _process_and_save_profile_picture(student_id, raw_bytes, current_user)
+
+
+@router.post("/{student_id}/profile-picture-base64")
+async def upload_profile_picture_base64(
+    student_id: str,
+    payload: Base64PhotoRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload student profile picture using base64 JSON payload."""
+    import base64
+    img_data = payload.image
+    if "," in img_data:
+        img_data = img_data.split(",")[1]
+    try:
+        raw_bytes = base64.b64decode(img_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+    return _process_and_save_profile_picture(student_id, raw_bytes, current_user)
+
 
 
