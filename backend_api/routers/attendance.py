@@ -1,6 +1,9 @@
 import sqlite3
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import date, datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from typing import Optional, List, Dict, Any
 import base64
 import numpy as np
@@ -15,10 +18,14 @@ from backend_api.config import (
     get_today_date_str,
     get_time_str,
     is_attendance_late,
+    ATTENDANCE_LATE_AFTER,
     FACE_RECOGNITION_THRESHOLD,
     MIN_MATCH_MARGIN
 )
-from attendance_service.recognition import FaceQualityChecker, FaceMatcher, normalize_embedding
+from attendance_service.recognition import FaceQualityChecker, FaceMatcher, normalize_embedding, TemporalVerifier
+from backend_api.routers.admin import verify_campus_ip
+
+frame_verifier = TemporalVerifier(required_consistent_frames=3, max_interval_seconds=3.0, time_window_seconds=10.0)
 
 router = APIRouter(
     prefix="/attendance",
@@ -544,7 +551,12 @@ def end_session(session_id: int, admin_user: dict = Depends(require_admin)):
 
 
 @router.post("/session/{session_id}/heartbeat")
-def session_heartbeat(session_id: int, data: SessionHeartbeatRequest, current_user: dict = Depends(get_current_user)):
+def session_heartbeat(
+    session_id: int,
+    data: SessionHeartbeatRequest,
+    current_user: dict = Depends(get_current_user),
+    _ip_check: None = Depends(verify_campus_ip)
+):
     student_id = current_user.get("student_id")
     if not student_id or student_id == "admin":
         raise HTTPException(status_code=400, detail="Student session heartbeat required")
@@ -676,7 +688,11 @@ def check_student_today(student_id: str, current_user: dict = Depends(get_curren
 # Mark attendance
 # ----------------------------
 @router.post("/mark")
-def mark_attendance(data: AttendanceMarkRequest, current_user: dict = Depends(get_current_user)):
+def mark_attendance(
+    data: AttendanceMarkRequest,
+    current_user: dict = Depends(get_current_user),
+    _ip_check: None = Depends(verify_campus_ip)
+):
     student_id = data.student_id.strip()
     user_role = current_user.get("role")
     logged_in_sid = (current_user.get("student_id") or "").strip()
@@ -715,10 +731,14 @@ def mark_attendance(data: AttendanceMarkRequest, current_user: dict = Depends(ge
             "method": existing[2] if len(existing) > 2 and existing[2] else "manual"
         }
 
+    from backend.database import get_system_config
+    late_cutoff = get_system_config("late_after_time", ATTENDANCE_LATE_AFTER)
+    mark_status = "Late" if is_attendance_late(time_now, late_cutoff) else "Present"
+
     try:
         cursor.execute(
-            "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed) VALUES (?, ?, ?, 'manual', 100.0, 1)",
-            (student_id, today, time_now)
+            "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed, status) VALUES (?, ?, ?, 'manual', 100.0, 1, ?)",
+            (student_id, today, time_now, mark_status)
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -814,12 +834,13 @@ def _load_gallery_from_db(conn):
 # ----------------------------------------------------------------------
 class FrameRecognitionRequest(BaseModel):
     image: str
-    confidence_threshold: float = 0.65
+    confidence_threshold: Optional[float] = None
 
 @router.post("/recognize-frame")
 async def recognize_frame(
     req: FrameRecognitionRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    _ip_check: None = Depends(verify_campus_ip)
 ):
     try:
         import cv2
@@ -841,7 +862,12 @@ async def recognize_frame(
         device = _get_device()
 
         boxes, probs, landmarks = mtcnn.detect(pil_img, landmarks=True)
+        user_role = current_user.get("role")
+        logged_in_sid = (current_user.get("student_id") or "").strip()
+
         if boxes is None or len(boxes) == 0:
+            if user_role != "admin" and logged_in_sid:
+                frame_verifier.reset_student(logged_in_sid)
             return {
                 "success": True,
                 "face_detected": False,
@@ -858,7 +884,9 @@ async def recognize_frame(
         # Check face bounding box dimensions (ensure face isn't too small)
         face_w = float(primary_box[2] - primary_box[0])
         face_h = float(primary_box[3] - primary_box[1])
-        if face_w < 55 or face_h < 55:
+        if face_w < 50 or face_h < 50:
+            if user_role != "admin" and logged_in_sid:
+                frame_verifier.reset_student(logged_in_sid)
             return {
                 "success": True,
                 "face_detected": True,
@@ -873,6 +901,8 @@ async def recognize_frame(
         # Quality check on the detected face
         q_eval = quality_checker.evaluate(img_np, primary_box, primary_landmarks)
         if not q_eval["valid"]:
+            if user_role != "admin" and logged_in_sid:
+                frame_verifier.reset_student(logged_in_sid)
             return {
                 "success": True,
                 "face_detected": True,
@@ -888,6 +918,8 @@ async def recognize_frame(
         # Extract aligned face crops
         faces = mtcnn.extract(pil_img, boxes, save_path=None)
         if faces is None or len(faces) == 0:
+            if user_role != "admin" and logged_in_sid:
+                frame_verifier.reset_student(logged_in_sid)
             return {
                 "success": True,
                 "face_detected": True,
@@ -902,13 +934,26 @@ async def recognize_frame(
         today = get_today_date_str()
         time_now = get_time_str()
 
-        user_role = current_user.get("role")
-        logged_in_sid = (current_user.get("student_id") or "").strip()
-
         # Load enrolled student gallery with multi-embeddings
         gallery = _load_gallery_from_db(conn)
-        effective_threshold = float(FACE_RECOGNITION_THRESHOLD)
-        matcher = FaceMatcher(threshold=effective_threshold, min_margin=MIN_MATCH_MARGIN)
+
+        # Dynamic biometric configuration from system_config (with config defaults fallback)
+        from backend.database import get_system_config
+        try:
+            effective_threshold = float(get_system_config("face_threshold", str(FACE_RECOGNITION_THRESHOLD)))
+        except (ValueError, TypeError):
+            effective_threshold = float(FACE_RECOGNITION_THRESHOLD)
+
+        try:
+            effective_margin = float(get_system_config("min_margin", str(MIN_MATCH_MARGIN)))
+        except (ValueError, TypeError):
+            effective_margin = float(MIN_MATCH_MARGIN)
+
+        # Allow request to explicitly override threshold if provided by caller
+        if req.confidence_threshold is not None:
+            effective_threshold = float(req.confidence_threshold)
+
+        matcher = FaceMatcher(threshold=effective_threshold, min_margin=effective_margin)
 
         # -------------------------------------------------------------
         # SCENARIO A: Student Portal - Strict 1:1 Biometric Verification
@@ -926,6 +971,7 @@ async def recognize_frame(
                 }
 
             if face_count > 1:
+                frame_verifier.reset_student(logged_in_sid)
                 conn.close()
                 return {
                     "success": True,
@@ -948,6 +994,7 @@ async def recognize_frame(
             confidence_pct = round(min(99.8, max(0.0, sim_score * 100)), 1)
 
             if match_res["status"] == "NOT_ENROLLED":
+                frame_verifier.reset_student(logged_in_sid)
                 conn.close()
                 return {
                     "success": True,
@@ -961,6 +1008,7 @@ async def recognize_frame(
                 }
 
             if match_res["status"] == "PROXY_MISMATCH":
+                frame_verifier.reset_student(logged_in_sid)
                 conn.close()
                 detected_other_id = match_res.get("detected_student_id")
                 detected_other_name = match_res.get("detected_name")
@@ -981,7 +1029,33 @@ async def recognize_frame(
                 }
 
             if match_res["recognized"]:
-                # Verified! Mark attendance ONLY for this logged-in student
+                # Multi-frame Temporal Consistency Verification:
+                # Require matching the same student identity for at least 3 consecutive frames
+                # before writing attendance to the database or session logs.
+                is_verified, consistent_count = frame_verifier.record_match(logged_in_sid)
+                if not is_verified:
+                    conn.close()
+                    return {
+                        "success": True,
+                        "face_detected": True,
+                        "recognized": False,
+                        "verifying": True,
+                        "consecutive_frames": consistent_count,
+                        "required_frames": 3,
+                        "enrolled": True,
+                        "mismatch": False,
+                        "student_id": logged_in_sid,
+                        "name": match_res.get("name"),
+                        "department": match_res.get("department", "General"),
+                        "confidence": confidence_pct,
+                        "similarity": sim_score,
+                        "box": primary_box_coords,
+                        "already_marked": False,
+                        "liveness_passed": True,
+                        "message": f"Verifying identity... ({consistent_count}/3 frames confirmed). Hold steady."
+                    }
+
+                # Verified! Mark attendance ONLY after 3 consecutive frames
                 cursor = conn.cursor()
                 cursor.execute("SELECT time, confidence, method FROM attendance WHERE student_id = ? AND date = ?", (logged_in_sid, today))
                 existing_record = cursor.fetchone()
@@ -1000,10 +1074,31 @@ async def recognize_frame(
 
                 if active_sess:
                     sess_id = active_sess[0]
+                    # Rate-limit session logs: only record if at least 15s have passed since the previous log
                     cursor.execute("""
-                        INSERT INTO attendance_session_logs (session_id, student_id, timestamp, time, confidence, liveness_passed)
-                        VALUES (?, ?, ?, ?, ?, 1)
-                    """, (sess_id, logged_in_sid, datetime.now().isoformat(), time_now, confidence_pct))
+                        SELECT timestamp FROM attendance_session_logs
+                        WHERE session_id = ? AND student_id = ?
+                        ORDER BY id DESC LIMIT 1
+                    """, (sess_id, logged_in_sid))
+                    last_log_row = cursor.fetchone()
+                    should_write_log = True
+                    if last_log_row and last_log_row[0]:
+                        try:
+                            last_iso = last_log_row[0]
+                            if "T" in last_iso:
+                                prev_dt = datetime.fromisoformat(last_iso)
+                            else:
+                                prev_dt = datetime.strptime(last_iso[:19], "%Y-%m-%d %H:%M:%S")
+                            if (datetime.now() - prev_dt).total_seconds() < 15.0:
+                                should_write_log = False
+                        except Exception:
+                            pass
+
+                    if should_write_log:
+                        cursor.execute("""
+                            INSERT INTO attendance_session_logs (session_id, student_id, timestamp, time, confidence, liveness_passed)
+                            VALUES (?, ?, ?, ?, ?, 1)
+                        """, (sess_id, logged_in_sid, datetime.now().isoformat(), time_now, confidence_pct))
 
                     cursor.execute("""
                         SELECT timestamp, time, confidence FROM attendance_session_logs
@@ -1037,7 +1132,7 @@ async def recognize_frame(
                             )
                         except sqlite3.IntegrityError:
                             already_marked = True
-                    else:
+                    elif should_write_log:
                         cursor.execute("""
                             UPDATE attendance
                             SET status = ?, session_id = ?, minutes_attended = ?, reason = ?
@@ -1046,10 +1141,12 @@ async def recognize_frame(
                         conn.commit()
                 else:
                     if not already_marked:
+                        late_cutoff = get_system_config("late_after_time", ATTENDANCE_LATE_AFTER)
+                        status_to_mark = "Late" if is_attendance_late(time_now, late_cutoff) else "Present"
                         try:
                             cursor.execute(
-                                "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed, status) VALUES (?, ?, ?, 'face_recognition', ?, 1, 'Present')",
-                                (logged_in_sid, today, time_now, confidence_pct)
+                                "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed, status) VALUES (?, ?, ?, 'face_recognition', ?, 1, ?)",
+                                (logged_in_sid, today, time_now, confidence_pct, status_to_mark)
                             )
                             conn.commit()
                             create_notification(
@@ -1069,6 +1166,9 @@ async def recognize_frame(
                     "success": True,
                     "face_detected": True,
                     "recognized": True,
+                    "verifying": False,
+                    "consecutive_frames": consistent_count,
+                    "required_frames": 3,
                     "enrolled": True,
                     "mismatch": False,
                     "student_id": logged_in_sid,
@@ -1083,12 +1183,14 @@ async def recognize_frame(
                     "message": "Attendance marked successfully! ✅" if not already_marked else f"Attendance already recorded today at {record_time}"
                 }
             else:
+                frame_verifier.reset_student(logged_in_sid)
                 conn.close()
                 user_msg = match_res.get("message") or f"Match similarity is {confidence_pct}% ({int(effective_threshold*100)}% required). Face the camera directly."
                 return {
                     "success": True,
                     "face_detected": True,
                     "recognized": False,
+                    "verifying": False,
                     "enrolled": True,
                     "mismatch": False,
                     "student_id": logged_in_sid,
@@ -1137,48 +1239,74 @@ async def recognize_frame(
                 matched_name = match_res["name"]
                 matched_dept = match_res.get("department", "General")
 
-                cursor.execute("SELECT time, confidence, method FROM attendance WHERE student_id = ? AND date = ?", (matched_sid, today))
-                existing_record = cursor.fetchone()
-                already_marked = existing_record is not None
-                record_time = existing_record[0] if already_marked else time_now
+                is_verified, consistent_count = frame_verifier.record_match(matched_sid)
+                if not is_verified:
+                    face_info = {
+                        "recognized": False,
+                        "verifying": True,
+                        "consecutive_frames": consistent_count,
+                        "required_frames": 3,
+                        "student_id": matched_sid,
+                        "name": matched_name,
+                        "department": matched_dept,
+                        "confidence": confidence_pct,
+                        "similarity": sim_score,
+                        "box": box,
+                        "already_marked": False,
+                        "status": f"Verifying ({consistent_count}/3)",
+                        "message": f"Verifying identity ({consistent_count}/3)... Hold still.",
+                        "liveness_passed": True
+                    }
+                    detected_faces.append(face_info)
+                else:
+                    cursor.execute("SELECT time, confidence, method FROM attendance WHERE student_id = ? AND date = ?", (matched_sid, today))
+                    existing_record = cursor.fetchone()
+                    already_marked = existing_record is not None
+                    record_time = existing_record[0] if already_marked else time_now
 
-                if not already_marked:
-                    try:
-                        cursor.execute(
-                            "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed) VALUES (?, ?, ?, 'face_recognition', ?, 1)",
-                            (matched_sid, today, time_now, confidence_pct)
-                        )
-                        conn.commit()
-                        create_notification(
-                            student_id=matched_sid,
-                            title="Attendance Successfully Marked ✅",
-                            message=f"Kiosk face recognition verified your attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
-                            notif_type="attendance_success",
-                            severity="success",
-                            action_url="/student/attendance",
-                            metadata={"confidence": confidence_pct, "method": "face_recognition", "date": today, "time": time_now}
-                        )
-                    except sqlite3.IntegrityError:
-                        already_marked = True
+                    if not already_marked:
+                        late_cutoff = get_system_config("late_after_time", ATTENDANCE_LATE_AFTER)
+                        status_to_mark = "Late" if is_attendance_late(time_now, late_cutoff) else "Present"
+                        try:
+                            cursor.execute(
+                                "INSERT INTO attendance (student_id, date, time, method, confidence, liveness_passed, status) VALUES (?, ?, ?, 'face_recognition', ?, 1, ?)",
+                                (matched_sid, today, time_now, confidence_pct, status_to_mark)
+                            )
+                            conn.commit()
+                            create_notification(
+                                student_id=matched_sid,
+                                title="Attendance Successfully Marked ✅",
+                                message=f"Kiosk face recognition verified your attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
+                                notif_type="attendance_success",
+                                severity="success",
+                                action_url="/student/attendance",
+                                metadata={"confidence": confidence_pct, "method": "face_recognition", "date": today, "time": time_now}
+                            )
+                        except sqlite3.IntegrityError:
+                            already_marked = True
 
-                face_info = {
-                    "recognized": True,
-                    "student_id": matched_sid,
-                    "name": matched_name,
-                    "department": matched_dept,
-                    "confidence": confidence_pct,
-                    "similarity": sim_score,
-                    "box": box,
-                    "already_marked": already_marked,
-                    "marked_time": record_time,
-                    "status": "Already Marked Today" if already_marked else "Marked Present ✅",
-                    "liveness_passed": True
-                }
-                detected_faces.append(face_info)
-                recognized_students.append(face_info)
+                    face_info = {
+                        "recognized": True,
+                        "verifying": False,
+                        "consecutive_frames": consistent_count,
+                        "required_frames": 3,
+                        "student_id": matched_sid,
+                        "name": matched_name,
+                        "department": matched_dept,
+                        "confidence": confidence_pct,
+                        "similarity": sim_score,
+                        "box": box,
+                        "already_marked": already_marked,
+                        "marked_time": record_time,
+                        "status": "Already Marked Today" if already_marked else "Marked Present ✅",
+                        "liveness_passed": True
+                    }
+                    detected_faces.append(face_info)
+                    recognized_students.append(face_info)
             else:
                 detected_faces.append({
                     "recognized": False,
+                    "verifying": False,
                     "name": "Unrecognized Face",
                     "confidence": confidence_pct,
                     "similarity": sim_score,
@@ -1212,7 +1340,7 @@ async def recognize_frame(
         }
 
     except Exception as e:
-        print(f"[RECOGNIZE-FRAME] Error: {e}")
+        logger.error("[RECOGNIZE-FRAME] Error: %s", e)
         return {
             "success": False,
             "face_detected": False,

@@ -61,98 +61,98 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
     const isPresent = record.status !== "Absent";
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
             <div
-                className="relative w-full max-w-md rounded-2xl bg-[#0b1120] border border-slate-700/80 p-6 shadow-2xl space-y-5 text-slate-100 animate-scale-up"
+                className="relative w-full max-w-md rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl space-y-5 text-slate-800 animate-scale-up"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                        <div className="h-8 w-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold text-sm">
                             <span>🔍</span>
                         </div>
                         <div>
-                            <h2 className="text-base font-bold text-white tracking-tight">Verification Details</h2>
-                            <p className="text-xs text-emerald-400 font-mono font-semibold">{formattedDate}</p>
+                            <h2 className="text-base font-bold text-slate-900 tracking-tight">Verification Details</h2>
+                            <p className="text-xs text-emerald-700 font-mono font-semibold">{formattedDate}</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="h-7 w-7 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer font-bold"
                     >
                         ✕
                     </button>
                 </div>
 
                 {/* Status Hero Card */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                     <div>
-                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Status</span>
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
                         <div className="flex items-center gap-2 mt-0.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span className="text-base font-black text-emerald-400 tracking-wide">
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                            <span className="text-base font-black text-emerald-700 tracking-wide">
                                 {isPresent ? "🟢 PRESENT" : "🔴 ABSENT"}
                             </span>
                         </div>
                     </div>
                     <div className="text-right">
-                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Recorded Time</span>
-                        <span className="text-sm font-mono font-bold text-white mt-0.5 block">{formattedTime}</span>
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Recorded Time</span>
+                        <span className="text-sm font-mono font-bold text-slate-900 mt-0.5 block">{formattedTime}</span>
                     </div>
                 </div>
 
                 {/* Verification Telemetry Grid */}
                 <div className="space-y-3">
                     {/* Verification Breakdown */}
-                    <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                             Verification Breakdown
                         </span>
                         <div className="space-y-2 text-xs">
                             <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-1.5 text-slate-200">
-                                    <span className="text-emerald-400 font-bold">✓</span> Face Recognition
+                                <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                                    <span className="text-emerald-600 font-bold">✓</span> Face Recognition
                                 </span>
-                                <span className="text-emerald-400 text-[11px] font-mono font-semibold">Matched (FaceNet AI)</span>
+                                <span className="text-emerald-700 text-[11px] font-mono font-semibold">Matched (FaceNet AI)</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-1.5 text-slate-200">
-                                    <span className="text-emerald-400 font-bold">✓</span> Liveness Detection
+                                <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                                    <span className="text-emerald-600 font-bold">✓</span> Liveness Detection
                                 </span>
-                                <span className="text-emerald-400 text-[11px] font-mono font-semibold">Live Sensor OK</span>
+                                <span className="text-emerald-700 text-[11px] font-mono font-semibold">Live Sensor OK</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-1.5 text-slate-200">
-                                    <span className="text-emerald-400 font-bold">✓</span> Verification Type
+                                <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                                    <span className="text-emerald-600 font-bold">✓</span> Verification Type
                                 </span>
-                                <span className="text-white text-[11px] font-mono font-semibold">Face + Liveness</span>
+                                <span className="text-slate-900 text-[11px] font-mono font-semibold">Face + Liveness</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Metadata Specs */}
                     <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-                            <span className="text-[11px] text-slate-400 uppercase font-semibold block">Student ID</span>
-                            <span className="text-sm font-bold text-white font-mono">{record.student_id}</span>
-                            {record.name && <span className="text-[11px] text-slate-400 block truncate">{record.name}</span>}
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <span className="text-[11px] text-slate-500 uppercase font-semibold block">Student ID</span>
+                            <span className="text-sm font-bold text-slate-900 font-mono">{record.student_id}</span>
+                            {record.name && <span className="text-[11px] text-slate-500 block truncate">{record.name}</span>}
                         </div>
 
-                        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-                            <span className="text-[11px] text-slate-400 uppercase font-semibold block">Confidence</span>
-                            <span className="text-sm font-bold text-emerald-400 font-mono">{confidenceScore}%</span>
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <span className="text-[11px] text-slate-500 uppercase font-semibold block">Confidence</span>
+                            <span className="text-sm font-bold text-emerald-700 font-mono">{confidenceScore}%</span>
                             <span className="text-[11px] text-slate-500 block">Biometric Score</span>
                         </div>
                     </div>
 
                     {/* Attendance ID / Hash */}
-                    <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                         <div>
-                            <span className="text-[11px] text-slate-400 uppercase font-semibold block">Attendance ID</span>
-                            <span className="font-mono font-bold text-indigo-300 text-xs mt-0.5 block">{attendanceId}</span>
+                            <span className="text-[11px] text-slate-500 uppercase font-semibold block">Attendance ID</span>
+                            <span className="font-mono font-bold text-blue-700 text-xs mt-0.5 block">{attendanceId}</span>
                         </div>
-                        <span className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-mono font-bold">
+                        <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-mono font-bold">
                             AUDIT LOGGED
                         </span>
                     </div>
@@ -162,7 +162,7 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                 <div className="pt-2">
                     <button
                         onClick={onClose}
-                        className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors cursor-pointer"
+                        className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-200 transition-colors cursor-pointer"
                     >
                         Close Details
                     </button>

@@ -76,8 +76,8 @@ export default function ReportsPage() {
 
     if (loading) {
         return (
-            <div className="flex h-64 items-center justify-center text-slate-400">
-                <div className="inline-block animate-spin h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full mr-3" />
+            <div className="flex h-64 items-center justify-center text-slate-500">
+                <div className="inline-block animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mr-3" />
                 <p>Generating attendance analytical reports...</p>
             </div>
         );
@@ -88,8 +88,8 @@ export default function ReportsPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-white tracking-tight">Attendance Reports</h1>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Attendance Reports</h1>
+                    <p className="text-xs text-slate-500 mt-1">
                         Institutional attendance trends, aggregate analytics, and historical exports
                     </p>
                 </div>
@@ -97,15 +97,17 @@ export default function ReportsPage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={loadData}
-                        className="inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-200 transition-colors"
+                        className="inline-flex items-center gap-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 transition-colors shadow-xs cursor-pointer active:scale-95"
                     >
-                        <span>🔄</span>
-                        <span>Generate Report</span>
+                        <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Refresh Data</span>
                     </button>
 
                     <button
                         onClick={() => exportAttendanceCsv(filteredRecords, `Attendance_Report_${new Date().toISOString().split("T")[0]}`)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-4 py-2.5 text-xs font-semibold text-black transition-all shadow-lg shadow-emerald-500/20"
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs font-bold text-white transition-all shadow-sm cursor-pointer active:scale-95"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -116,14 +118,14 @@ export default function ReportsPage() {
             </div>
 
             {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                 {/* Date Range */}
                 <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Date Range</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Date Range</label>
                     <select
                         value={selectedRange}
                         onChange={(e) => setSelectedRange(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                     >
                         <option value="7">Last 7 Days</option>
                         <option value="30">Last 30 Days (Current Month)</option>
@@ -134,11 +136,11 @@ export default function ReportsPage() {
 
                 {/* Department Filter */}
                 <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Department</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Department</label>
                     <select
                         value={selectedDept}
                         onChange={(e) => setSelectedDept(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                     >
                         <option value="ALL">All Departments</option>
                         {departments.map((d) => (
@@ -149,11 +151,11 @@ export default function ReportsPage() {
 
                 {/* Student Filter */}
                 <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Student</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Student</label>
                     <select
                         value={selectedStudentId}
                         onChange={(e) => setSelectedStudentId(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                     >
                         <option value="ALL">All Students</option>
                         {students.map((s) => (
@@ -167,57 +169,58 @@ export default function ReportsPage() {
 
             {/* Summary KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-5 shadow-lg">
-                    <span className="text-xs font-semibold uppercase text-slate-400 block">Total Records</span>
-                    <span className="text-2xl font-extrabold text-white mt-2 block">{totalRecordsCount.toLocaleString()}</span>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <span className="text-xs font-semibold uppercase text-slate-500 block">Total Records</span>
+                    <span className="text-2xl font-black text-slate-900 mt-2 block">{totalRecordsCount.toLocaleString()}</span>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-5 shadow-lg">
-                    <span className="text-xs font-semibold uppercase text-slate-400 block">Present</span>
-                    <span className="text-2xl font-extrabold text-emerald-400 mt-2 block">{presentCount.toLocaleString()}</span>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <span className="text-xs font-semibold uppercase text-slate-500 block">Present</span>
+                    <span className="text-2xl font-black text-emerald-700 mt-2 block">{presentCount.toLocaleString()}</span>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-5 shadow-lg">
-                    <span className="text-xs font-semibold uppercase text-slate-400 block">Absent</span>
-                    <span className="text-2xl font-extrabold text-red-400 mt-2 block">{absentCount.toLocaleString()}</span>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <span className="text-xs font-semibold uppercase text-slate-500 block">Absent</span>
+                    <span className="text-2xl font-black text-rose-700 mt-2 block">{absentCount.toLocaleString()}</span>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-5 shadow-lg">
-                    <span className="text-xs font-semibold uppercase text-slate-400 block">Avg Attendance</span>
-                    <span className="text-2xl font-extrabold text-teal-300 mt-2 block">{avgAttendanceRate}%</span>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <span className="text-xs font-semibold uppercase text-slate-500 block">Avg Attendance</span>
+                    <span className="text-2xl font-black text-teal-700 mt-2 block">{avgAttendanceRate}%</span>
                 </div>
             </div>
 
             {/* Attendance Trend Chart */}
-            <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <div>
-                        <h2 className="text-base font-semibold text-white">Attendance Trend</h2>
-                        <p className="text-xs text-slate-400">Weekly Attendance % Distribution</p>
+                        <h2 className="text-base font-bold text-slate-900">Attendance Trend</h2>
+                        <p className="text-xs text-slate-500">Weekly Attendance % Distribution</p>
                     </div>
-                    <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                         Peak: 91.0% (Wed)
                     </span>
                 </div>
 
-                <div className="h-64 w-full">
+                <div className="h-64 sm:h-72 w-full min-h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={trendData}>
                             <defs>
                                 <linearGradient id="rateGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                             <XAxis dataKey="day" stroke="#64748b" fontSize={12} />
                             <YAxis stroke="#64748b" fontSize={12} domain={[50, 100]} unit="%" />
                             <Tooltip
                                 contentStyle={{
-                                    backgroundColor: "#0f172a",
-                                    borderColor: "#334155",
+                                    backgroundColor: "#ffffff",
+                                    borderColor: "#cbd5e1",
                                     borderRadius: "8px",
-                                    fontSize: "12px"
+                                    fontSize: "12px",
+                                    color: "#0f172a",
                                 }}
                             />
                             <Area
@@ -234,11 +237,11 @@ export default function ReportsPage() {
             </div>
 
             {/* Student Attendance Profiles & Interactive Monthly Calendar Cards */}
-            <div className="rounded-xl border border-slate-800 bg-[#0b1120] p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <div>
-                        <h2 className="text-base font-semibold text-white">Student Attendance Profiles</h2>
-                        <p className="text-xs text-slate-400">Click any student to view their interactive monthly attendance calendar</p>
+                        <h2 className="text-base font-bold text-slate-900">Student Attendance Profiles</h2>
+                        <p className="text-xs text-slate-500">Click any student to view their interactive monthly attendance calendar</p>
                     </div>
                 </div>
 
@@ -251,35 +254,36 @@ export default function ReportsPage() {
                             <div
                                 key={student.student_id}
                                 onClick={() => setSelectedStudentForCalendar(student)}
-                                className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 hover:border-emerald-500/50 hover:bg-slate-900/50 transition-all cursor-pointer group shadow-lg"
+                                className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:border-blue-400 hover:bg-blue-50/20 transition-all cursor-pointer group shadow-xs active:scale-[0.99]"
                             >
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-200">
+                                        <div className="h-10 w-10 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center font-bold text-blue-700">
                                             {student.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-white group-hover:text-emerald-400 transition-colors text-sm">
+                                            <h3 className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors text-sm">
                                                 {student.name}
                                             </h3>
-                                            <span className="text-xs text-slate-400 font-mono">
+                                            <span className="text-xs text-slate-500 font-mono">
                                                 {student.student_id} • {student.department}
                                             </span>
                                         </div>
                                     </div>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                                        isRegistered ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+                                        isRegistered ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
                                     }`}>
-                                        {isRegistered ? "Face ✓" : "Pending"}
+                                        <span className={`h-1.5 w-1.5 rounded-full ${isRegistered ? "bg-emerald-500" : "bg-amber-500"}`} />
+                                        {isRegistered ? "Enrolled" : "Pending"}
                                     </span>
                                 </div>
 
-                                <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                                <div className="space-y-1.5 pt-2 border-t border-slate-200">
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-slate-400">Attendance Rate</span>
-                                        <span className="font-mono font-bold text-emerald-400">{rate}%</span>
+                                        <span className="text-slate-500">Attendance Rate</span>
+                                        <span className="font-mono font-bold text-emerald-700">{rate}%</span>
                                     </div>
-                                    <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
                                         <div
                                             className="bg-emerald-500 h-full rounded-full"
                                             style={{ width: `${rate}%` }}
@@ -292,26 +296,26 @@ export default function ReportsPage() {
                 </div>
             </div>
 
-            {/* ⭐ STUDENT ATTENDANCE CALENDAR MODAL */}
+            {/* STUDENT ATTENDANCE CALENDAR MODAL */}
             {selectedStudentForCalendar && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-                    <div className="w-full max-w-xl rounded-2xl bg-[#0b1120] border border-slate-800 shadow-2xl p-6 space-y-6">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
+                    <div className="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-4 sm:p-6 space-y-5 my-auto max-h-[90vh] overflow-y-auto">
                         {/* Header */}
-                        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-200">
                             <div className="flex items-center gap-3">
-                                <div className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold text-lg">
+                                <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center font-bold text-lg">
                                     {selectedStudentForCalendar.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-white">{selectedStudentForCalendar.name}</h2>
-                                    <p className="text-xs text-slate-400 font-mono">
+                                    <h2 className="text-lg font-bold text-slate-900">{selectedStudentForCalendar.name}</h2>
+                                    <p className="text-xs text-slate-500 font-mono">
                                         {selectedStudentForCalendar.student_id} • {selectedStudentForCalendar.department}
                                     </p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setSelectedStudentForCalendar(null)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 font-bold"
                             >
                                 ✕
                             </button>
@@ -319,40 +323,40 @@ export default function ReportsPage() {
 
                         {/* Overview stats */}
                         <div className="grid grid-cols-4 gap-3 text-center">
-                            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block font-semibold">Attendance</span>
-                                <span className="text-lg font-extrabold text-emerald-400 mt-1 block">92.4%</span>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">Attendance</span>
+                                <span className="text-lg font-black text-emerald-700 mt-1 block">92.4%</span>
                             </div>
-                            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block font-semibold">Present</span>
-                                <span className="text-lg font-bold text-white mt-1 block">86</span>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">Present</span>
+                                <span className="text-lg font-bold text-slate-900 mt-1 block">86</span>
                             </div>
-                            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block font-semibold">Absent</span>
-                                <span className="text-lg font-bold text-red-400 mt-1 block">7</span>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">Absent</span>
+                                <span className="text-lg font-bold text-rose-700 mt-1 block">7</span>
                             </div>
-                            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block font-semibold">Late</span>
-                                <span className="text-lg font-bold text-amber-400 mt-1 block">3</span>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <span className="text-[10px] text-slate-500 uppercase block font-semibold">Late</span>
+                                <span className="text-lg font-bold text-amber-700 mt-1 block">3</span>
                             </div>
                         </div>
 
                         {/* Calendar View */}
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
                                     September 2026 Attendance Calendar
                                 </h3>
-                                <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                                <div className="flex items-center gap-3 text-[11px] text-slate-500">
                                     <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Present</span>
-                                    <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Absent</span>
+                                    <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" /> Absent</span>
                                     <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Late</span>
                                 </div>
                             </div>
 
-                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                 {/* Weekday headers */}
-                                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 mb-2">
+                                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-500 mb-2">
                                     <span>Mon</span>
                                     <span>Tue</span>
                                     <span>Wed</span>
@@ -400,14 +404,14 @@ export default function ReportsPage() {
                                             key={item.day}
                                             className={`h-9 rounded-lg border flex flex-col items-center justify-center font-medium transition-all ${
                                                 item.status === "present"
-                                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold"
                                                     : item.status === "absent"
-                                                    ? "bg-red-500/10 border-red-500/30 text-red-400 font-bold"
+                                                    ? "bg-rose-50 border-rose-200 text-rose-700 font-bold"
                                                     : item.status === "late"
-                                                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400 font-bold"
+                                                    ? "bg-amber-50 border-amber-200 text-amber-700 font-bold"
                                                     : item.status === "weekend"
-                                                    ? "bg-slate-900/30 border-transparent text-slate-600"
-                                                    : "bg-slate-900/60 border-slate-800/60 text-slate-400"
+                                                    ? "bg-slate-100 border-transparent text-slate-400"
+                                                    : "bg-white border-slate-200 text-slate-600"
                                             }`}
                                         >
                                             <span className="text-[11px]">{item.day}</span>
@@ -420,7 +424,7 @@ export default function ReportsPage() {
                         <div className="pt-2">
                             <button
                                 onClick={() => setSelectedStudentForCalendar(null)}
-                                className="w-full py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-semibold transition-colors"
+                                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                             >
                                 Close Profile
                             </button>
@@ -431,4 +435,3 @@ export default function ReportsPage() {
         </div>
     );
 }
-

@@ -19,8 +19,8 @@ class FaceMatcher:
         aggregation: str = "max"  # "max" or "top_k_mean"
     ):
         # Read from environment with safe default fallback
-        env_threshold = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.72"))
-        env_margin = float(os.getenv("MIN_MATCH_MARGIN", "0.06"))
+        env_threshold = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.75"))
+        env_margin = float(os.getenv("MIN_MATCH_MARGIN", "0.08"))
 
         self.threshold = threshold if threshold is not None else env_threshold
         self.min_margin = min_margin if min_margin is not None else env_margin
@@ -121,22 +121,8 @@ class FaceMatcher:
             target_score, _, target_name, target_dept = target_entry
             target_score = round(float(target_score), 3)
 
-            # 1. Matches the logged-in student
-            if target_score >= self.threshold:
-                return {
-                    "status": "KNOWN",
-                    "recognized": True,
-                    "student_id": target_student_id,
-                    "name": target_name,
-                    "department": target_dept,
-                    "similarity_score": target_score,
-                    "margin": margin,
-                    "mismatch": False,
-                    "message": "Identity verified successfully"
-                }
-
-            # 2. Check if the face belongs to a different student (Anti-Proxy)
-            if best_sid.strip().upper() != target_sid_clean and best_score >= self.threshold and margin >= self.min_margin:
+            # 1. Check if the face belongs to a different student (Anti-Proxy)
+            if best_sid.strip().upper() != target_sid_clean and best_score >= self.threshold:
                 return {
                     "status": "PROXY_MISMATCH",
                     "recognized": False,
@@ -150,7 +136,34 @@ class FaceMatcher:
                     "message": f"Proxy attendance blocked: Face matches {best_name} ({best_sid}), but logged in as {target_name} ({target_student_id})."
                 }
 
-            # 3. Uncertain vs Unknown
+            # 2. Matches the logged-in student (Enforce S1 >= threshold AND margin >= min_margin)
+            if best_sid.strip().upper() == target_sid_clean and target_score >= self.threshold and margin >= self.min_margin:
+                return {
+                    "status": "KNOWN",
+                    "recognized": True,
+                    "student_id": target_student_id,
+                    "name": target_name,
+                    "department": target_dept,
+                    "similarity_score": target_score,
+                    "margin": margin,
+                    "mismatch": False,
+                    "message": "Identity verified successfully"
+                }
+
+            # 3. Ambiguous match (Top score is above threshold but margin is too narrow)
+            if target_score >= self.threshold and margin < self.min_margin:
+                return {
+                    "status": "UNCERTAIN",
+                    "recognized": False,
+                    "student_id": target_student_id,
+                    "name": target_name,
+                    "similarity_score": target_score,
+                    "margin": margin,
+                    "mismatch": False,
+                    "message": f"Identity ambiguity detected (similarity {target_score}, margin {margin} < {self.min_margin}). Please face camera directly in good lighting."
+                }
+
+            # 4. Near-threshold match
             if target_score >= (self.threshold - 0.08):
                 return {
                     "status": "UNCERTAIN",
@@ -188,6 +201,17 @@ class FaceMatcher:
                 "second_similarity": round(float(second_score), 3) if second_score > -1.0 else 0.0,
                 "margin": margin,
                 "message": f"Recognized: {best_name} ({best_sid})"
+            }
+
+        if best_score >= self.threshold and margin < self.min_margin:
+            return {
+                "status": "UNCERTAIN",
+                "recognized": False,
+                "candidate_student_id": best_sid,
+                "candidate_name": best_name,
+                "similarity_score": best_score,
+                "margin": margin,
+                "message": f"Match ambiguous (similarity {best_score}, margin {margin} < {self.min_margin}). Please face camera directly."
             }
 
         if best_score >= (self.threshold - 0.08):

@@ -1,74 +1,157 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --bg-page: #F8FAFC;
-    --card-bg: #FFFFFF;
-    --text-primary: #111827;
-    --text-secondary: #64748B;
-    --primary-accent: #4F46E5;
-    --accent-light: #EEF2FF;
-    --border-color: #E5E7EB;
-    --color-success: #16A34A;
-    --color-error: #DC2626;
-  }
+/* Design System & CSS Variables — Crisp Light Theme Tokens */
+:root {
+  --bg-canvas: #f8fafc;          /* Tailwind slate-50 */
+  --bg-surface: #ffffff;         /* Clean white card surface */
+  --bg-surface-subtle: #f1f5f9;  /* Tailwind slate-100 */
+  --border-subtle: #e2e8f0;      /* Tailwind slate-200 */
+  --border-strong: #cbd5e1;      /* Tailwind slate-300 */
+  
+  --text-primary: #0f172a;       /* Tailwind slate-900 */
+  --text-body: #334155;          /* Tailwind slate-700 */
+  --text-muted: #64748b;         /* Tailwind slate-500 */
+  --text-subtle: #94a3b8;        /* Tailwind slate-400 */
 
-  html,
-  body,
-  #root {
-    min-height: 100%;
-    background-color: #F8FAFC;
-    color: #111827;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
+  --primary-accent: #2563eb;      /* Tailwind blue-600 */
+  --primary-accent-hover: #1d4ed8;/* Tailwind blue-700 */
+  --primary-surface: #eff6ff;     /* Tailwind blue-50 */
+  --primary-border: #bfdbfe;      /* Tailwind blue-200 */
 
-  /* Custom scrollbar for modern enterprise look */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #CBD5E1;
-    border-radius: 9999px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #94A3B8;
-  }
+  --success-surface: #ecfdf5;     /* Tailwind emerald-50 */
+  --success-border: #a7f3d0;      /* Tailwind emerald-200 */
+  --success-text: #047857;        /* Tailwind emerald-700 */
+
+  --warning-surface: #fffbeb;     /* Tailwind amber-50 */
+  --warning-border: #fde68a;      /* Tailwind amber-200 */
+  --warning-text: #b45309;        /* Tailwind amber-700 */
+
+  --danger-surface: #fff1f2;      /* Tailwind rose-50 */
+  --danger-border: #fecdd3;       /* Tailwind rose-200 */
+  --danger-text: #be123c;         /* Tailwind rose-700 */
+
+  /* Emil Kowalski Animation Curves */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Subtle scanning beam animation for VERIDEX camera HUD */
-@keyframes veridexScan {
-  0% {
-    top: 5%;
-    opacity: 0.2;
-  }
-  50% {
-    opacity: 0.9;
-  }
-  100% {
-    top: 95%;
-    opacity: 0.2;
-  }
+/* Global White / Light Theme Body Canvas */
+html,
+body,
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.animate-scan-beam {
-  animation: veridexScan 2.6s ease-in-out infinite alternate;
+/* Selection Highlights */
+::selection {
+  background-color: #dbeafe; /* blue-100 */
+  color: #1e3a8a;            /* blue-900 */
 }
 
-@keyframes pulseSubtle {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.85;
+/* Mirror video stream for front-facing webcam preview */
+.mirror {
+  transform: scaleX(-1);
+}
+
+/* Custom crisp scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Consistent Input Focus Ring Helper */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* Tactile Micro-Interactions: Universal button press feedback */
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
+  transition: transform 120ms var(--ease-out);
+}
+
+/* Hardware-Accelerated Smooth Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
-  50% {
-    transform: scale(1.03);
+  to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.animate-pulse-subtle {
-  animation: pulseSubtle 3s ease-in-out infinite;
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.22s var(--ease-out) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.20s var(--ease-out) forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.20s var(--ease-out) forwards;
+}
+
+/* Safe Area Padding Helper for Mobile Navbars */
+.safe-bottom-padding {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Accessibility: Respect user reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

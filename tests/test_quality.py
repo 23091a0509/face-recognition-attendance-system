@@ -37,4 +37,6 @@ def test_quality_accepts_good_synthetic_face():
     # Centered 200x200 face
     box = np.array([220, 140, 420, 340])
     res = checker.evaluate(img, box)
-    assert res["quality_score"] > 0.0
+    assert res["valid"] is True
+    assert res["message"] == "Quality optimal"
+    assert res["quality_score"] >= 0.50

@@ -26,6 +26,10 @@ def run_all_tests():
         "tests.test_matcher",
         "tests.test_database_uniqueness",
         "tests.test_auth_rbac",
+        "tests.test_session_attendance_rules",
+        "tests.test_ip_geofencing",
+        "tests.test_temporal",
+        "tests.test_integration",
     ]
 
     total_run = 0

@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt, JWTError, ExpiredSignatureError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import status
-
-
+from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 
@@ -21,17 +20,42 @@ ALGORITHM = "HS256"
 
 from backend.database import get_connection
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+def hash_password(plain_password: str) -> str:
+    """Hash a password using bcrypt with standard 12 salt rounds, safely truncated to 72 bytes."""
+    if not plain_password:
+        raise ValueError("Password cannot be empty")
+    pwd_bytes = plain_password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain password against a bcrypt hash."""
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
+
+class PasswordContext:
+    @staticmethod
+    def hash(secret: str) -> str:
+        return hash_password(secret)
+
+    @staticmethod
+    def verify(secret: str, hashed: str) -> bool:
+        return verify_password(secret, hashed)
+
+pwd_context = PasswordContext()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def create_token(student_id: str):
     payload = {
         "sub": student_id,
         "role": "admin" if student_id == "admin" else "student",
-        "exp": datetime.utcnow() + timedelta(hours=8)
+        "exp": datetime.now(timezone.utc) + timedelta(hours=8)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -89,8 +113,22 @@ async def login(request: Request):
     }
 
 
+class RegisterRequest(BaseModel):
+    student_id: str
+    name: str
+    department: str
+    password: str
+
 @router.post("/register")
-def register(student_id: str, name: str, department: str, password: str):
+def register(data: RegisterRequest):
+    student_id = data.student_id.strip()
+    name = data.name.strip()
+    department = data.department.strip()
+    password = data.password
+
+    if not student_id or not name or not department or not password:
+        raise HTTPException(status_code=400, detail="All fields (student_id, name, department, password) are required")
+
     conn = get_connection()
     cursor = conn.cursor()
     

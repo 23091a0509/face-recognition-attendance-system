@@ -31,7 +31,7 @@ export default function StudentsPage() {
 
     async function handleDelete(studentId: string, studentName?: string) {
         const name = studentName || studentId;
-        if (!window.confirm(`Are you sure you want to delete ${name} (${studentId})? This will remove all their records and face embedding data.`)) {
+        if (!window.confirm(`Are you sure you want to delete ${name} (${studentId})? This will remove their attendance records and saved face data.`)) {
             return;
         }
         try {
@@ -51,7 +51,7 @@ export default function StudentsPage() {
             alert("No students to remove.");
             return;
         }
-        if (!window.confirm(`⚠️ WARNING: Are you sure you want to delete ALL ${nonAdminStudents.length} students from the system? You will be able to add fresh students right after.`)) {
+        if (!window.confirm(`Are you sure you want to delete ALL ${nonAdminStudents.length} students from the system? You will be able to add fresh students right after.`)) {
             return;
         }
 
@@ -88,8 +88,7 @@ export default function StudentsPage() {
             const matchesStatus =
                 selectedFaceStatus === "ALL" ||
                 (selectedFaceStatus === "registered" && (s.has_face || s.face_status === "registered")) ||
-                (selectedFaceStatus === "needs_update" && s.face_status === "needs_update") ||
-                (selectedFaceStatus === "not_registered" && !s.has_face && s.face_status !== "needs_update");
+                (selectedFaceStatus === "not_registered" && !s.has_face && s.face_status !== "registered");
 
             return matchesSearch && matchesDept && matchesStatus;
         });
@@ -97,16 +96,16 @@ export default function StudentsPage() {
 
     if (loading) {
         return (
-            <div className="flex h-64 items-center justify-center text-slate-400">
-                <div className="inline-block animate-spin h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full mr-3" />
-                <p>Loading student profiles...</p>
+            <div className="flex h-64 items-center justify-center text-slate-500">
+                <div className="inline-block animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mr-3" />
+                <p className="text-sm font-medium">Loading student list...</p>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400">
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium">
                 {error}
             </div>
         );
@@ -118,41 +117,43 @@ export default function StudentsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-3">
-                        <h1 className="text-2xl font-bold text-white tracking-tight">Students Directory</h1>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Student Directory</h1>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 shadow-xs font-mono">
                             {students.length} Total
                         </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                        Register new students with face embeddings, manage profiles, or remove student details
+                    <p className="text-xs text-slate-500 mt-1">
+                        Add new students with face photos, manage profiles, or remove students
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                     {students.length > 0 && (
                         <button
                             onClick={handleClearAll}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 px-3.5 py-2.5 text-xs font-bold transition-all"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer"
                         >
-                            <span>🗑️</span>
-                            <span>Remove All Students</span>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Remove All</span>
                         </button>
                     )}
 
                     <button
                         onClick={() => setShowModal(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-4 py-2.5 text-sm font-bold text-black transition-all shadow-lg shadow-emerald-500/20"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-xs sm:text-sm font-bold text-white transition-all shadow-sm cursor-pointer"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
-                        <span>+ Add New Student</span>
+                        <span>Add New Student</span>
                     </button>
                 </div>
             </div>
 
             {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
                 {/* Search */}
                 <div className="relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
@@ -165,55 +166,156 @@ export default function StudentsPage() {
                         placeholder="Search student by name or ID..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                     />
                 </div>
 
-                {/* Department Filter */}
+                {/* Department */}
                 <div>
                     <select
                         value={selectedDept}
                         onChange={(e) => setSelectedDept(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium cursor-pointer"
                     >
-                        <option value="ALL">All Departments ({departments.length})</option>
+                        <option value="ALL">All Departments ({departments.length || 1})</option>
                         {departments.map((d) => (
-                            <option key={d} value={d}>{d}</option>
+                            <option key={d} value={d}>
+                                {d}
+                            </option>
                         ))}
                     </select>
                 </div>
 
-                {/* Face Status Filter */}
+                {/* Face Status */}
                 <div>
                     <select
                         value={selectedFaceStatus}
                         onChange={(e) => setSelectedFaceStatus(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium cursor-pointer"
                     >
-                        <option value="ALL">All Face Statuses</option>
-                        <option value="registered">🟢 Face Registered</option>
-                        <option value="needs_update">🟡 Needs Update</option>
-                        <option value="not_registered">🔴 Not Registered</option>
+                        <option value="ALL">All Face Registration Statuses</option>
+                        <option value="registered">Registered Biometrics</option>
+                        <option value="not_registered">Pending Biometrics</option>
                     </select>
                 </div>
             </div>
 
-            {/* Students Table */}
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#0b1120] shadow-xl">
+            {/* DUAL VIEW: Responsive Cards for Mobile, Data Table for Desktop */}
+
+            {/* 1. Mobile Cards View (block md:hidden) */}
+            <div className="block md:hidden space-y-3">
+                {filteredStudents.length > 0 ? (
+                    filteredStudents.map((s) => {
+                        const isRegistered = s.has_face || s.face_status === "registered";
+                        const rate = s.attendance_rate || 0;
+
+                        return (
+                            <div
+                                key={`mob-${s.student_id}`}
+                                className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs space-y-3"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        {s.photo_url ? (
+                                            <img
+                                                src={s.photo_url}
+                                                alt={s.name}
+                                                className="h-11 w-11 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
+                                                onError={(e) => {
+                                                    (e.currentTarget as HTMLElement).style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="h-11 w-11 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-blue-700 text-sm flex-shrink-0">
+                                                {s.name ? s.name.charAt(0).toUpperCase() : "S"}
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                    {s.student_id}
+                                                </span>
+                                                <h3 className="font-bold text-sm text-slate-900 truncate">{s.name}</h3>
+                                            </div>
+                                            <p className="text-xs text-slate-500 truncate mt-0.5">
+                                                {s.department || "Computer Science"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Face Status Pill */}
+                                    {isRegistered ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                            Face AI
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                            Pending
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Attendance Rate & Progress Bar */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs text-slate-500 font-medium">
+                                        <span>Attendance Rate</span>
+                                        <span className="font-bold text-slate-900">{rate}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                            className={`h-1.5 rounded-full ${
+                                                rate >= 75 ? "bg-emerald-500" : rate >= 50 ? "bg-amber-500" : "bg-rose-500"
+                                            }`}
+                                            style={{ width: `${Math.min(100, Math.max(0, rate))}%` }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                                    <button
+                                        onClick={() => setSelectedStudentForProfile(s)}
+                                        className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors text-center cursor-pointer"
+                                    >
+                                        View Profile
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(s.student_id, s.name)}
+                                        disabled={deletingId === s.student_id}
+                                        className="py-2 px-3 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                        {deletingId === s.student_id ? "..." : "Delete"}
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })
+                ) : (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400">
+                        <p className="font-semibold text-slate-700">No students match your filter</p>
+                        <p className="text-xs text-slate-400 mt-1">Try adjusting the search or department filter</p>
+                    </div>
+                )}
+            </div>
+
+            {/* 2. Desktop High-Density Table (hidden md:block) */}
+            <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-900/80 text-slate-300 border-b border-slate-800">
+                        <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider">
                             <tr>
-                                <th className="px-5 py-3.5 font-semibold">ID</th>
-                                <th className="px-5 py-3.5 font-semibold">Student Name</th>
-                                <th className="px-5 py-3.5 font-semibold">Department</th>
-                                <th className="px-5 py-3.5 font-semibold">Face Biometric</th>
-                                <th className="px-5 py-3.5 font-semibold">Attendance Rate</th>
-                                <th className="px-5 py-3.5 font-semibold text-right">Actions</th>
+                                <th className="px-5 py-3.5">ID</th>
+                                <th className="px-5 py-3.5">Student Name</th>
+                                <th className="px-5 py-3.5">Department</th>
+                                <th className="px-5 py-3.5">Face Biometric</th>
+                                <th className="px-5 py-3.5">Attendance Rate</th>
+                                <th className="px-5 py-3.5 text-right">Actions</th>
                             </tr>
                         </thead>
 
-                        <tbody className="divide-y divide-slate-800/80">
+                        <tbody className="divide-y divide-slate-100">
                             {filteredStudents.length > 0 ? (
                                 filteredStudents.map((s) => {
                                     const isRegistered = s.has_face || s.face_status === "registered";
@@ -221,9 +323,9 @@ export default function StudentsPage() {
                                     const rate = s.attendance_rate || 0;
 
                                     return (
-                                        <tr key={s.student_id} className="hover:bg-slate-800/40 transition-colors">
+                                        <tr key={s.student_id} className="hover:bg-slate-50 transition-colors">
                                             {/* Student ID */}
-                                            <td className="px-5 py-3.5 font-mono font-medium text-emerald-400">
+                                            <td className="px-5 py-3.5 font-mono font-bold text-blue-700">
                                                 {s.student_id}
                                             </td>
 
@@ -234,18 +336,18 @@ export default function StudentsPage() {
                                                         <img
                                                             src={s.photo_url}
                                                             alt={s.name}
-                                                            className="h-9 w-9 rounded-full object-cover border border-emerald-500/40 shadow-sm flex-shrink-0"
+                                                            className="h-9 w-9 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
                                                             onError={(e) => {
                                                                 (e.currentTarget as HTMLElement).style.display = 'none';
                                                             }}
                                                         />
                                                     ) : (
-                                                        <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300 text-xs flex-shrink-0">
+                                                        <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs flex-shrink-0">
                                                             {s.name ? s.name.charAt(0).toUpperCase() : "S"}
                                                         </div>
                                                     )}
                                                     <div>
-                                                        <span className="font-medium text-white block">{s.name}</span>
+                                                        <span className="font-semibold text-slate-900 block">{s.name}</span>
                                                         <span className="text-[11px] text-slate-500 font-mono">
                                                             {s.email || `${s.student_id.toLowerCase()}@institution.edu`}
                                                         </span>
@@ -254,25 +356,25 @@ export default function StudentsPage() {
                                             </td>
 
                                             {/* Department */}
-                                            <td className="px-5 py-3.5 text-slate-400">
+                                            <td className="px-5 py-3.5 text-slate-600">
                                                 {s.department || "General"}
                                             </td>
 
                                             {/* Face Registration Status */}
                                             <td className="px-5 py-3.5">
                                                 {isRegistered ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                                         Face Registered
                                                     </span>
                                                 ) : needsUpdate ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                                                         Needs Update
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                                                         Not Registered
                                                     </span>
                                                 )}
@@ -281,26 +383,24 @@ export default function StudentsPage() {
                                             {/* Attendance Rate */}
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-20 bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                                                    <div className="w-16 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                                         <div
-                                                            className={`h-full rounded-full transition-all ${
-                                                                rate >= 80 ? "bg-emerald-500" : rate >= 60 ? "bg-amber-500" : "bg-red-500"
+                                                            className={`h-1.5 rounded-full ${
+                                                                rate >= 75 ? "bg-emerald-500" : rate >= 50 ? "bg-amber-500" : "bg-rose-500"
                                                             }`}
-                                                            style={{ width: `${Math.max(rate, 5)}%` }}
+                                                            style={{ width: `${Math.min(100, Math.max(0, rate))}%` }}
                                                         />
                                                     </div>
-                                                    <span className="font-mono text-xs font-bold text-slate-300">
-                                                        {rate}%
-                                                    </span>
+                                                    <span className="font-semibold text-slate-800 text-xs font-mono">{rate}%</span>
                                                 </div>
                                             </td>
 
-                                            {/* Direct Action Buttons */}
+                                            {/* Actions */}
                                             <td className="px-5 py-3.5 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button
                                                         onClick={() => setSelectedStudentForProfile(s)}
-                                                        className="px-2.5 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors"
+                                                        className="px-2.5 py-1.5 text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors cursor-pointer font-medium"
                                                     >
                                                         Profile
                                                     </button>
@@ -308,9 +408,9 @@ export default function StudentsPage() {
                                                     <button
                                                         onClick={() => handleDelete(s.student_id, s.name)}
                                                         disabled={deletingId === s.student_id}
-                                                        className="px-2.5 py-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-lg border border-red-500/30 font-semibold transition-colors disabled:opacity-50"
+                                                        className="px-2.5 py-1.5 text-xs text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 font-semibold transition-colors disabled:opacity-50 cursor-pointer"
                                                     >
-                                                        {deletingId === s.student_id ? "Deleting..." : "🗑️ Delete"}
+                                                        {deletingId === s.student_id ? "Deleting..." : "Delete"}
                                                     </button>
                                                 </div>
                                             </td>
@@ -319,10 +419,9 @@ export default function StudentsPage() {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                                        <p className="text-2xl mb-1">👥</p>
-                                        <p className="font-medium text-slate-400">No students found</p>
-                                        <p className="text-xs text-slate-600 mt-1">Click "+ Add New Student" above to register students</p>
+                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                                        <p className="font-medium text-slate-600">No students found matching your criteria.</p>
+                                        <p className="text-xs text-slate-400 mt-1">Click "+ Add New Student" above to register new profiles.</p>
                                     </td>
                                 </tr>
                             )}
@@ -341,13 +440,13 @@ export default function StudentsPage() {
 
             {/* Student Profile Quick View Modal */}
             {selectedStudentForProfile && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="w-full max-w-md rounded-2xl bg-[#0b1120] border border-slate-800 shadow-2xl p-6 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                            <h3 className="text-base font-bold text-white">Student Profile</h3>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
+                    <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <h3 className="text-base font-bold text-slate-900">Student Profile</h3>
                             <button
                                 onClick={() => setSelectedStudentForProfile(null)}
-                                className="text-slate-400 hover:text-white"
+                                className="text-slate-400 hover:text-slate-700 font-bold p-1 cursor-pointer"
                             >
                                 ✕
                             </button>
@@ -358,41 +457,41 @@ export default function StudentsPage() {
                                 <img
                                     src={selectedStudentForProfile.photo_url}
                                     alt={selectedStudentForProfile.name}
-                                    className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-xl shadow-emerald-500/20"
+                                    className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
                                 />
                             ) : (
-                                <div className="h-20 w-20 mx-auto rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center font-bold text-2xl text-emerald-400">
+                                <div className="h-20 w-20 mx-auto rounded-2xl bg-blue-50 border-2 border-blue-200 flex items-center justify-center font-bold text-2xl text-blue-700">
                                     {selectedStudentForProfile.name?.charAt(0).toUpperCase()}
                                 </div>
                             )}
-                            <h4 className="text-lg font-bold text-white">{selectedStudentForProfile.name}</h4>
-                            <p className="text-xs font-mono text-emerald-400">{selectedStudentForProfile.student_id}</p>
+                            <h4 className="text-lg font-bold text-slate-900">{selectedStudentForProfile.name}</h4>
+                            <p className="text-xs font-mono text-blue-700 font-bold">{selectedStudentForProfile.student_id}</p>
                         </div>
 
-                        <div className="bg-slate-900/60 rounded-xl p-3.5 border border-slate-800 space-y-2 text-xs">
+                        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2 text-xs">
                             <div className="flex justify-between">
-                                <span className="text-slate-400">Department:</span>
-                                <span className="text-slate-200 font-semibold">{selectedStudentForProfile.department || "Computer Science"}</span>
+                                <span className="text-slate-500">Department:</span>
+                                <span className="text-slate-900 font-semibold">{selectedStudentForProfile.department || "Computer Science"}</span>
                             </div>
                             {selectedStudentForProfile.year && (
                                 <div className="flex justify-between">
-                                    <span className="text-slate-400">Academic Year:</span>
-                                    <span className="text-slate-200 font-semibold">{selectedStudentForProfile.year}</span>
+                                    <span className="text-slate-500">Academic Year:</span>
+                                    <span className="text-slate-900 font-semibold">{selectedStudentForProfile.year}</span>
                                 </div>
                             )}
                             <div className="flex justify-between">
-                                <span className="text-slate-400">Student Email:</span>
-                                <span className="text-slate-300 font-mono">{selectedStudentForProfile.email || `${selectedStudentForProfile.student_id.toLowerCase()}@institution.edu`}</span>
+                                <span className="text-slate-500">Student Email:</span>
+                                <span className="text-slate-700 font-mono">{selectedStudentForProfile.email || `${selectedStudentForProfile.student_id.toLowerCase()}@institution.edu`}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-slate-400">Face Registration:</span>
-                                <span className="text-emerald-400 font-semibold">
-                                    {selectedStudentForProfile.has_face ? "🟢 Biometric Active" : "🔴 Not Registered"}
+                                <span className="text-slate-500">Face Registration:</span>
+                                <span className="text-emerald-700 font-semibold">
+                                    {selectedStudentForProfile.has_face ? "Biometric Enrolled ✓" : "Pending Enrollment"}
                                 </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-slate-400">Attendance Rate:</span>
-                                <span className="text-teal-300 font-bold">{selectedStudentForProfile.attendance_rate || 0}%</span>
+                                <span className="text-slate-500">Attendance Rate:</span>
+                                <span className="text-blue-700 font-bold font-mono">{selectedStudentForProfile.attendance_rate || 0}%</span>
                             </div>
                         </div>
 
@@ -402,13 +501,13 @@ export default function StudentsPage() {
                                     handleDelete(selectedStudentForProfile.student_id, selectedStudentForProfile.name);
                                     setSelectedStudentForProfile(null);
                                 }}
-                                className="flex-1 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-bold transition-all"
+                                className="flex-1 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-all cursor-pointer"
                             >
                                 Delete Student
                             </button>
                             <button
                                 onClick={() => setSelectedStudentForProfile(null)}
-                                className="flex-1 py-2 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs font-semibold transition-all"
+                                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold transition-all cursor-pointer border border-slate-200"
                             >
                                 Close
                             </button>

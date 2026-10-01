@@ -8,8 +8,8 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "dev-service-api-key")
 
 CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
-FACE_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.72"))
-MIN_MATCH_MARGIN = float(os.getenv("MIN_MATCH_MARGIN", "0.06"))
+FACE_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.75"))
+MIN_MATCH_MARGIN = float(os.getenv("MIN_MATCH_MARGIN", "0.08"))
 FRAME_SKIP = int(os.getenv("FRAME_SKIP", "1"))
 
 # Decoupled processing intervals (Instructions 7 & 8)
@@ -22,10 +22,10 @@ LIVENESS_TIMEOUT_SECONDS = float(os.getenv("LIVENESS_TIMEOUT_SECONDS", "10.0"))
 CACHE_RELOAD_INTERVAL = float(os.getenv("CACHE_RELOAD_INTERVAL", "15.0"))
 
 # Quality thresholds (Instructions 14 & 15)
-MIN_FACE_SIZE = int(os.getenv("MIN_FACE_SIZE", "60"))
+MIN_FACE_SIZE = int(os.getenv("MIN_FACE_SIZE", "50"))
 MIN_BLUR_VAR = float(os.getenv("MIN_BLUR_VAR", "20.0"))
 MIN_BRIGHTNESS = float(os.getenv("MIN_BRIGHTNESS", "30.0"))
-MAX_BRIGHTNESS = float(os.getenv("MAX_BRIGHTNESS", "240.0"))
+MAX_BRIGHTNESS = float(os.getenv("MAX_BRIGHTNESS", "245.0"))
 
 # Tracking and caching
 TRACKER_IOU_THRESHOLD = float(os.getenv("TRACKER_IOU_THRESHOLD", "0.40"))

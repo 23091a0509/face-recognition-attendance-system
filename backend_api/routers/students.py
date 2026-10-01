@@ -3,7 +3,10 @@ import pickle
 from backend.database import get_connection
 import sqlite3
 import os
+import logging
 from .auth import require_admin, get_current_user
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CACHE_PATH = os.path.join(ROOT_DIR, "attendance_service", "students_cache.pkl")
@@ -255,14 +258,17 @@ async def register_student(
 
     except HTTPException:
         raise
+    except (ImportError, ModuleNotFoundError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Biometric ML runtime dependencies are not installed in this environment ({e}). Please install full requirements.txt on the edge/kiosk node."
+        )
     except sqlite3.IntegrityError as e:
-        print(f"ERROR: Student registration uniqueness conflict: {e}")
         raise HTTPException(
             status_code=400,
             detail="Student ID is already registered"
         )
     except Exception as e:
-        print(f"ERROR: Student registration failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -344,7 +350,7 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
         try:
             os.remove(photo_disk_path)
         except Exception as e:
-            print(f"[WARN] Failed to delete photo file for {student_id}: {e}")
+            logger.warning("Failed to delete photo file for %s: %s", student_id, e)
 
     # Update cache
     if os.path.exists(CACHE_PATH):
@@ -355,7 +361,7 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
             with open(CACHE_PATH, "wb") as f:
                 pickle.dump(cache, f)
         except Exception as e:
-            print(f"[WARN] Failed to remove student from cache file: {e}")
+            logger.warning("Failed to remove student from cache file: %s", e)
 
     return {"message": f"Student {student_id} successfully deleted"}
 
@@ -606,8 +612,13 @@ async def update_student_face(
 
     except HTTPException:
         raise
+    except (ImportError, ModuleNotFoundError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Biometric ML runtime dependencies are not installed in this environment ({e}). Please install full requirements.txt on the edge/kiosk node."
+        )
     except Exception as e:
-        print(f"[UPDATE-FACE] Error: {e}")
+        logger.error("[UPDATE-FACE] Error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -13,12 +13,8 @@ Provides:
 
 from .normalization import normalize_embedding, cosine_similarity
 from .quality import FaceQualityChecker
-from .detector import FaceDetector, get_device, get_mtcnn_detector
-from .embedder import FaceEmbedder, get_facenet_embedder
 from .matcher import FaceMatcher
 from .temporal import TemporalSmoother, TemporalVerifier
-from .liveness import LivenessStateMachine, LivenessState
-from .pipeline import RecognitionPipeline
 
 __all__ = [
     "normalize_embedding",
@@ -36,3 +32,31 @@ __all__ = [
     "get_mtcnn_detector",
     "get_facenet_embedder",
 ]
+
+def __getattr__(name: str):
+    if name in ("FaceDetector", "get_device", "get_mtcnn_detector"):
+        from .detector import FaceDetector, get_device, get_mtcnn_detector
+        mapping = {
+            "FaceDetector": FaceDetector,
+            "get_device": get_device,
+            "get_mtcnn_detector": get_mtcnn_detector,
+        }
+        return mapping[name]
+    elif name in ("FaceEmbedder", "get_facenet_embedder"):
+        from .embedder import FaceEmbedder, get_facenet_embedder
+        mapping = {
+            "FaceEmbedder": FaceEmbedder,
+            "get_facenet_embedder": get_facenet_embedder,
+        }
+        return mapping[name]
+    elif name in ("LivenessStateMachine", "LivenessState"):
+        from .liveness import LivenessStateMachine, LivenessState
+        mapping = {
+            "LivenessStateMachine": LivenessStateMachine,
+            "LivenessState": LivenessState,
+        }
+        return mapping[name]
+    elif name == "RecognitionPipeline":
+        from .pipeline import RecognitionPipeline
+        return RecognitionPipeline
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

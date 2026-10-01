@@ -17,5 +17,8 @@ services:
         generateValue: true
       - key: SERVICE_API_KEY
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
       - key: FRONTEND_URL
         value: https://face-recognition-attendance-system-jet.vercel.app
+

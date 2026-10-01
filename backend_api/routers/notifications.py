@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from backend.database import get_connection
 from backend_api.routers.auth import get_current_user, require_admin
@@ -59,7 +62,7 @@ def create_notification(
         conn.close()
         return True
     except Exception as e:
-        print(f"[ERROR] Failed to create notification: {e}")
+        logger.error("Failed to create notification: %s", e)
         return False
 
 # -------------------------------------------------------------
