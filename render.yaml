@@ -20,5 +20,20 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://face-recognition-attendance-system-jet.vercel.app
+        value: https://face-attendance-frontend-6akx.onrender.com
+
+  - type: web
+    name: face-attendance-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://face-attendance-backend-wmpk.onrender.com
+
 
