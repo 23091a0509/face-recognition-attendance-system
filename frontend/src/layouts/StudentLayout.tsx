@@ -211,11 +211,25 @@ export default function StudentLayout() {
                         <>
                             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 shadow-xs">
                                 <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-xs font-black text-emerald-800 border border-emerald-200 flex-shrink-0 shadow-xs overflow-hidden">
-                                    {profile?.photo_url ? (
-                                        <img src={resolveImageUrl(profile.photo_url)} alt="" className="h-full w-full object-cover" />
-                                    ) : (
-                                        profile?.name ? profile.name.charAt(0).toUpperCase() : (studentId ? studentId.charAt(0).toUpperCase() : "S")
+                                    {profile?.photo_url && (
+                                        <img
+                                            src={resolveImageUrl(profile.photo_url)}
+                                            alt=""
+                                            className="h-full w-full object-cover"
+                                            onError={(e) => {
+                                                const target = e.currentTarget as HTMLElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) fallback.style.display = 'flex';
+                                            }}
+                                        />
                                     )}
+                                    <span
+                                        style={{ display: profile?.photo_url ? 'none' : 'flex' }}
+                                        className="h-full w-full items-center justify-center"
+                                    >
+                                        {profile?.name ? profile.name.charAt(0).toUpperCase() : (studentId ? studentId.charAt(0).toUpperCase() : "S")}
+                                    </span>
                                     <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -244,11 +258,25 @@ export default function StudentLayout() {
                                 title={`Logged in: ${profile?.name || studentId}`}
                                 className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-xs font-black text-emerald-800 border border-emerald-200 shadow-xs overflow-hidden"
                             >
-                                {profile?.photo_url ? (
-                                    <img src={resolveImageUrl(profile.photo_url)} alt="" className="h-full w-full object-cover" />
-                                ) : (
-                                    profile?.name ? profile.name.charAt(0).toUpperCase() : (studentId ? studentId.charAt(0).toUpperCase() : "S")
+                                {profile?.photo_url && (
+                                    <img
+                                        src={resolveImageUrl(profile.photo_url)}
+                                        alt=""
+                                        className="h-full w-full object-cover"
+                                        onError={(e) => {
+                                            const target = e.currentTarget as HTMLElement;
+                                            target.style.display = 'none';
+                                            const fallback = target.nextElementSibling as HTMLElement;
+                                            if (fallback) fallback.style.display = 'flex';
+                                        }}
+                                    />
                                 )}
+                                <span
+                                    style={{ display: profile?.photo_url ? 'none' : 'flex' }}
+                                    className="h-full w-full items-center justify-center"
+                                >
+                                    {profile?.name ? profile.name.charAt(0).toUpperCase() : (studentId ? studentId.charAt(0).toUpperCase() : "S")}
+                                </span>
                                 <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
                             </div>
                             <button

@@ -66,6 +66,40 @@ def get_facenet():
 
 from typing import List, Optional
 
+
+def _create_photo_data_url(image_bytes: bytes, max_dim: int = 300) -> Optional[str]:
+    """
+    Creates a compressed, square-cropped JPEG base64 Data URI from raw image bytes.
+    Enables permanent persistence in PostgreSQL and instant UI loading across cloud server restarts.
+    """
+    if not image_bytes:
+        return None
+    try:
+        from PIL import Image, ImageOps
+        import io
+        import base64
+
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+
+        # Center crop to square
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        img_cropped = img.crop((left, top, left + min_dim, top + min_dim))
+        img_resized = img_cropped.resize((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        buf = io.BytesIO()
+        img_resized.save(buf, format="JPEG", quality=85, optimize=True)
+        b64_str = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64_str}"
+    except Exception as e:
+        logger.warning("Failed to create photo data URI: %s", e)
+        return None
+
+
 @router.post("/register")
 async def register_student(
     student_id: str = Form(...),
@@ -202,16 +236,21 @@ async def register_student(
         from datetime import datetime
         now_iso = datetime.now().isoformat()
 
-        # Save photo file to disk for UI profile display
+        # Save photo: generate cloud-resilient Base64 Data URI + local disk fallback
         photo_url = None
         if saved_photo_bytes:
-            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
-            os.makedirs(profiles_dir, exist_ok=True)
-            photo_filename = f"{student_id}.jpg"
-            photo_disk_path = os.path.join(profiles_dir, photo_filename)
-            with open(photo_disk_path, "wb") as f:
-                f.write(saved_photo_bytes)
-            photo_url = f"/uploads/profiles/{photo_filename}"
+            photo_url = _create_photo_data_url(saved_photo_bytes, max_dim=300)
+            try:
+                profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+                os.makedirs(profiles_dir, exist_ok=True)
+                photo_filename = f"{student_id}.jpg"
+                photo_disk_path = os.path.join(profiles_dir, photo_filename)
+                with open(photo_disk_path, "wb") as f:
+                    f.write(saved_photo_bytes)
+                if not photo_url:
+                    photo_url = f"/uploads/profiles/{photo_filename}"
+            except Exception as disk_err:
+                logger.warning("Could not write photo to disk for %s: %s", student_id, disk_err)
 
         # Save student record with details and representative centroid embedding
         db_centroid_blob = pickle.dumps(np.array([final_emb]))
@@ -613,16 +652,21 @@ async def update_student_face(
         from datetime import datetime
         now_iso = datetime.now().isoformat()
 
-        # Save photo file to disk for UI profile display
+        # Save photo: generate cloud-resilient Base64 Data URI + local disk fallback
         photo_url = None
         if saved_photo_bytes:
-            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
-            os.makedirs(profiles_dir, exist_ok=True)
-            photo_filename = f"{student_id}.jpg"
-            photo_disk_path = os.path.join(profiles_dir, photo_filename)
-            with open(photo_disk_path, "wb") as f:
-                f.write(saved_photo_bytes)
-            photo_url = f"/uploads/profiles/{photo_filename}"
+            photo_url = _create_photo_data_url(saved_photo_bytes, max_dim=300)
+            try:
+                profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+                os.makedirs(profiles_dir, exist_ok=True)
+                photo_filename = f"{student_id}.jpg"
+                photo_disk_path = os.path.join(profiles_dir, photo_filename)
+                with open(photo_disk_path, "wb") as f:
+                    f.write(saved_photo_bytes)
+                if not photo_url:
+                    photo_url = f"/uploads/profiles/{photo_filename}"
+            except Exception:
+                pass
 
         # Update representative centroid embedding and photo_url in students
         db_centroid_blob = pickle.dumps(np.array([final_emb]))
@@ -740,16 +784,23 @@ def _process_and_save_profile_picture(student_id: str, raw_bytes: bytes, current
         conn.close()
         raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
 
-    # 1. Local / cloud container persistence
-    profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
-    os.makedirs(profiles_dir, exist_ok=True)
-    photo_filename = f"{clean_sid}.jpg"
-    photo_path = os.path.join(profiles_dir, photo_filename)
-    with open(photo_path, "wb") as f:
-        f.write(processed_bytes)
+    # 1. Generate permanent cloud-resilient Base64 Data URI
+    import base64
+    b64_str = base64.b64encode(processed_bytes).decode("ascii")
+    data_url = f"data:image/jpeg;base64,{b64_str}"
 
-    # 2. Cloud Storage Bucket path
-    photo_url = f"/uploads/profiles/{photo_filename}"
+    # 2. Local container disk fallback
+    try:
+        profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+        os.makedirs(profiles_dir, exist_ok=True)
+        photo_filename = f"{clean_sid}.jpg"
+        photo_path = os.path.join(profiles_dir, photo_filename)
+        with open(photo_path, "wb") as f:
+            f.write(processed_bytes)
+    except Exception:
+        pass
+
+    photo_url = data_url
 
     # Update database record
     cursor.execute("UPDATE students SET photo_url = ? WHERE student_id = ?", (photo_url, clean_sid))

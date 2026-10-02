@@ -442,20 +442,25 @@ export default function StudentDashboard() {
                     {/* Student Photo with Interactive Upload */}
                     <div className="relative flex-shrink-0 flex flex-col items-center">
                         <div className="relative group/avatar h-28 w-28 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md bg-slate-100 flex items-center justify-center">
-                            {studentInfo?.photo_url ? (
+                            {studentInfo?.photo_url && (
                                 <img
                                     src={resolveImageUrl(studentInfo.photo_url)}
                                     alt={studentInfo?.name || "Student Profile"}
                                     className="h-full w-full object-cover"
                                     onError={(e) => {
-                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                        const target = e.currentTarget as HTMLElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) fallback.style.display = 'flex';
                                     }}
                                 />
-                            ) : (
-                                <div className="h-full w-full bg-emerald-50 flex items-center justify-center text-emerald-700 font-extrabold text-4xl shadow-sm">
-                                    {displayName.charAt(0).toUpperCase()}
-                                </div>
                             )}
+                            <div
+                                style={{ display: studentInfo?.photo_url ? 'none' : 'flex' }}
+                                className="h-full w-full bg-emerald-50 items-center justify-center text-emerald-700 font-extrabold text-4xl shadow-sm"
+                            >
+                                {displayName.charAt(0).toUpperCase()}
+                            </div>
 
                             {/* Hover Camera Overlay for Desktop */}
                             <button

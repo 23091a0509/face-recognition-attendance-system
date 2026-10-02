@@ -241,20 +241,27 @@ export default function StudentsPage() {
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-center gap-3">
-                                        {s.photo_url ? (
-                                            <img
-                                                src={resolveImageUrl(s.photo_url)}
-                                                alt={s.name}
-                                                className="h-11 w-11 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
-                                                onError={(e) => {
-                                                    (e.currentTarget as HTMLElement).style.display = 'none';
-                                                }}
-                                            />
-                                        ) : (
-                                            <div className="h-11 w-11 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-blue-700 text-sm flex-shrink-0">
-                                                {s.name ? s.name.charAt(0).toUpperCase() : "S"}
+                                        <div className="relative h-11 w-11 flex-shrink-0">
+                                            {s.photo_url && (
+                                                <img
+                                                    src={resolveImageUrl(s.photo_url)}
+                                                    alt={s.name}
+                                                    className="h-11 w-11 rounded-full object-cover border border-emerald-400 shadow-xs"
+                                                    onError={(e) => {
+                                                        const target = e.currentTarget as HTMLElement;
+                                                        target.style.display = 'none';
+                                                        const fallback = target.nextElementSibling as HTMLElement;
+                                                        if (fallback) fallback.style.display = 'flex';
+                                                    }}
+                                                />
+                                            )}
+                                            <div
+                                                style={{ display: s.photo_url ? 'none' : 'flex' }}
+                                                className="h-11 w-11 rounded-full bg-blue-50 border border-blue-200 items-center justify-center font-bold text-blue-700 text-sm shadow-xs"
+                                            >
+                                                {s.name ? s.name.charAt(0).toUpperCase() : (s.student_id ? s.student_id.charAt(0).toUpperCase() : "S")}
                                             </div>
-                                        )}
+                                        </div>
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
@@ -357,20 +364,27 @@ export default function StudentsPage() {
                                             {/* Student Avatar + Name */}
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-3">
-                                                    {s.photo_url ? (
-                                                        <img
-                                                            src={resolveImageUrl(s.photo_url)}
-                                                            alt={s.name}
-                                                            className="h-9 w-9 rounded-full object-cover border border-emerald-400 shadow-xs flex-shrink-0"
-                                                            onError={(e) => {
-                                                                (e.currentTarget as HTMLElement).style.display = 'none';
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs flex-shrink-0">
-                                                            {s.name ? s.name.charAt(0).toUpperCase() : "S"}
+                                                    <div className="relative h-9 w-9 flex-shrink-0">
+                                                        {s.photo_url && (
+                                                            <img
+                                                                src={resolveImageUrl(s.photo_url)}
+                                                                alt={s.name}
+                                                                className="h-9 w-9 rounded-full object-cover border border-emerald-400 shadow-xs"
+                                                                onError={(e) => {
+                                                                    const target = e.currentTarget as HTMLElement;
+                                                                    target.style.display = 'none';
+                                                                    const fallback = target.nextElementSibling as HTMLElement;
+                                                                    if (fallback) fallback.style.display = 'flex';
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <div
+                                                            style={{ display: s.photo_url ? 'none' : 'flex' }}
+                                                            className="h-9 w-9 rounded-full bg-slate-100 border border-slate-200 items-center justify-center font-bold text-slate-700 text-xs shadow-xs"
+                                                        >
+                                                            {s.name ? s.name.charAt(0).toUpperCase() : (s.student_id ? s.student_id.charAt(0).toUpperCase() : "S")}
                                                         </div>
-                                                    )}
+                                                    </div>
                                                     <div>
                                                         <span className="font-semibold text-slate-900 block">{s.name}</span>
                                                         <span className="text-[11px] text-slate-500 font-mono">
@@ -481,17 +495,27 @@ export default function StudentsPage() {
                         </div>
 
                         <div className="text-center space-y-2 py-2">
-                            {selectedStudentForProfile.photo_url ? (
-                                <img
-                                    src={resolveImageUrl(selectedStudentForProfile.photo_url)}
-                                    alt={selectedStudentForProfile.name}
-                                    className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
-                                />
-                            ) : (
-                                <div className="h-20 w-20 mx-auto rounded-2xl bg-blue-50 border-2 border-blue-200 flex items-center justify-center font-bold text-2xl text-blue-700">
-                                    {selectedStudentForProfile.name?.charAt(0).toUpperCase()}
+                            <div className="relative h-24 w-24 mx-auto">
+                                {selectedStudentForProfile.photo_url && (
+                                    <img
+                                        src={resolveImageUrl(selectedStudentForProfile.photo_url)}
+                                        alt={selectedStudentForProfile.name}
+                                        className="h-24 w-24 mx-auto rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
+                                        onError={(e) => {
+                                            const target = e.currentTarget as HTMLElement;
+                                            target.style.display = 'none';
+                                            const fallback = target.nextElementSibling as HTMLElement;
+                                            if (fallback) fallback.style.display = 'flex';
+                                        }}
+                                    />
+                                )}
+                                <div
+                                    style={{ display: selectedStudentForProfile.photo_url ? 'none' : 'flex' }}
+                                    className="h-24 w-24 mx-auto rounded-2xl bg-blue-50 border-2 border-blue-200 items-center justify-center font-bold text-2xl text-blue-700 shadow-sm"
+                                >
+                                    {selectedStudentForProfile.name?.charAt(0).toUpperCase() || "S"}
                                 </div>
-                            )}
+                            </div>
                             <h4 className="text-lg font-bold text-slate-900">{selectedStudentForProfile.name}</h4>
                             <p className="text-xs font-mono text-blue-700 font-bold">{selectedStudentForProfile.student_id}</p>
                         </div>
