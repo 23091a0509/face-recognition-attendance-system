@@ -26,7 +26,12 @@ export default function WebcamPage() {
     const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
     const [cameraActive, setCameraActive] = useState(false);
     const [cameraError, setCameraError] = useState("");
+    const [retryCount, setRetryCount] = useState(0);
     const [studentInfo, setStudentInfo] = useState<{ student_id: string; name?: string } | null>(null);
+
+    const restartCamera = useCallback(() => {
+        setRetryCount((c) => c + 1);
+    }, []);
 
     // Session State & Countdown
     const [session, setSession] = useState<AttendanceSession | null>(null);
@@ -145,7 +150,7 @@ export default function WebcamPage() {
         return () => clearInterval(syncInterval);
     }, [sessionEnded, fetchSessionData]);
 
-    // 4. Initialize User Camera Feed (Target 640x480 at high quality)
+    // 4. Initialize User Camera Feed (Target 640x480 at high quality with resilient fallbacks)
     useEffect(() => {
         if (sessionEnded) {
             if (streamRef.current) {
@@ -158,47 +163,89 @@ export default function WebcamPage() {
 
         let isMounted = true;
         setCameraError("");
+        setCameraActive(false);
 
-        const constraints: MediaStreamConstraints = {
-            video: {
-                facingMode,
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-            },
-            audio: false,
-        };
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const isSecure = window.isSecureContext !== false;
+            setCameraError(
+                !isSecure
+                    ? "Camera access requires HTTPS or localhost. If you are accessing via network IP, please use HTTPS."
+                    : "Camera capture is not supported by your current browser."
+            );
+            return;
+        }
 
-        navigator.mediaDevices
-            ?.getUserMedia(constraints)
-            .then((stream) => {
-                if (!isMounted) {
-                    stream.getTracks().forEach((t) => t.stop());
+        async function initCamera() {
+            let stream: MediaStream | null = null;
+            try {
+                // Primary attempt: requested facingMode and ideal 640x480 resolution
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                    },
+                    audio: false,
+                });
+            } catch (primaryErr: any) {
+                console.warn("Primary camera constraints failed, attempting fallback...", primaryErr);
+                try {
+                    // Fallback attempt: generic video capture (handles USB cams, virtual cams, and strict drivers)
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false,
+                    });
+                } catch (fallbackErr: any) {
+                    if (!isMounted) return;
+                    console.error("All camera access attempts failed:", fallbackErr);
+                    const name = fallbackErr.name || "";
+                    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+                        setCameraError("Camera permission denied. Click the camera/lock icon in your browser address bar to allow camera access.");
+                    } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+                        setCameraError("No webcam found on this device. Please connect a camera and click Retry.");
+                    } else if (name === "NotReadableError" || name === "TrackStartError") {
+                        setCameraError("Camera is currently in use by another program (Zoom, Teams, or another tab). Please close it and click Retry.");
+                    } else {
+                        setCameraError(fallbackErr.message || "Failed to start camera feed. Please check camera permissions.");
+                    }
+                    setCameraActive(false);
                     return;
                 }
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    videoRef.current.onloadedmetadata = () => {
-                        videoRef.current?.play().catch(console.error);
-                        setCameraActive(true);
-                    };
+            }
+
+            if (!isMounted || !stream) return;
+            streamRef.current = stream;
+
+            const video = videoRef.current;
+            if (video) {
+                video.srcObject = stream;
+                try {
+                    await video.play();
+                } catch (playErr) {
+                    console.warn("Autoplay promise rejected, awaiting metadata:", playErr);
                 }
-            })
-            .catch((err) => {
-                console.error("Camera access error:", err);
-                if (isMounted) {
-                    setCameraError("Camera permission denied or camera unavailable. Please allow camera permissions.");
-                    setCameraActive(false);
-                }
-            });
+            }
+            setCameraActive(true);
+        }
+
+        initCamera();
 
         return () => {
             isMounted = false;
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((t) => t.stop());
+                streamRef.current = null;
             }
         };
-    }, [facingMode, sessionEnded]);
+    }, [facingMode, sessionEnded, retryCount]);
+
+    // Guarantee stream attachment to video element whenever camera becomes active
+    useEffect(() => {
+        if (cameraActive && videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(console.warn);
+        }
+    }, [cameraActive]);
 
     // 5. Base64 Frame Capture at calibrated 640x480 with high quality (0.90)
     const captureFrameBase64 = useCallback((): string | null => {
@@ -597,52 +644,51 @@ export default function WebcamPage() {
             {/* Camera View Box */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
                 <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner flex items-center justify-center group">
-                    {cameraActive ? (
-                        <div className="relative w-full h-full">
-                            <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""}`}
-                            />
+                    {/* The video element is ALWAYS mounted in the DOM so videoRef is never null */}
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                    />
 
+                    {cameraActive && (
+                        <div className="absolute inset-0 pointer-events-none">
                             {/* High-Tech Scan Reticle */}
-                            <div className="absolute inset-0 pointer-events-none">
-                                {faceDetected ? (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <div
-                                            className={`relative w-48 sm:w-56 h-56 sm:h-64 border-2 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 ${
-                                                recognizedId
-                                                    ? "border-emerald-400 shadow-emerald-400/30"
-                                                    : verifyingStreak > 0
-                                                    ? "border-blue-400 shadow-blue-400/30"
-                                                    : "border-amber-400 shadow-amber-400/20"
-                                            }`}
-                                        >
-                                            <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-inherit" />
-                                            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-inherit" />
-                                            <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-inherit" />
-                                            <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-inherit" />
+                            {faceDetected ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <div
+                                        className={`relative w-48 sm:w-56 h-56 sm:h-64 border-2 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 ${
+                                            recognizedId
+                                                ? "border-emerald-400 shadow-emerald-400/30"
+                                                : verifyingStreak > 0
+                                                ? "border-blue-400 shadow-blue-400/30"
+                                                : "border-amber-400 shadow-amber-400/20"
+                                        }`}
+                                    >
+                                        <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-inherit" />
+                                        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-inherit" />
+                                        <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-inherit" />
+                                        <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-inherit" />
 
-                                            <div className="absolute -bottom-3.5 px-3 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase shadow-md flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-slate-300 text-slate-800 font-mono">
-                                                <span className={`h-2 w-2 rounded-full ${recognizedId ? "bg-emerald-500" : verifyingStreak > 0 ? "bg-blue-500" : "bg-amber-500"} animate-pulse`} />
-                                                {recognizedId
-                                                    ? `${recognizedId} (${confidence}%)`
-                                                    : verifyingStreak > 0
-                                                    ? `Checking Face (${verifyingStreak}/3)...`
-                                                    : "Detecting..."}
-                                            </div>
+                                        <div className="absolute -bottom-3.5 px-3 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase shadow-md flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-slate-300 text-slate-800 font-mono">
+                                            <span className={`h-2 w-2 rounded-full ${recognizedId ? "bg-emerald-500" : verifyingStreak > 0 ? "bg-blue-500" : "bg-amber-500"} animate-pulse`} />
+                                            {recognizedId
+                                                ? `${recognizedId} (${confidence}%)`
+                                                : verifyingStreak > 0
+                                                ? `Checking Face (${verifyingStreak}/3)...`
+                                                : "Detecting..."}
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center opacity-60">
-                                        <div className="w-48 sm:w-56 h-56 sm:h-64 border-2 border-dashed border-slate-400 rounded-2xl flex items-center justify-center">
-                                            <span className="text-xs text-slate-300 font-mono">Center Face in Frame</span>
-                                        </div>
+                                </div>
+                            ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-60">
+                                    <div className="w-48 sm:w-56 h-56 sm:h-64 border-2 border-dashed border-slate-400 rounded-2xl flex items-center justify-center">
+                                        <span className="text-xs text-slate-300 font-mono">Center Face in Frame</span>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             {/* Top HUD */}
                             <div className="absolute top-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono pointer-events-none">
@@ -662,13 +708,36 @@ export default function WebcamPage() {
                                 </div>
                             </div>
                         </div>
-                    ) : (
+                    )}
+
+                    {!cameraActive && (
                         <div className="text-center p-8 text-slate-400 space-y-3 flex flex-col items-center justify-center">
-                            <svg className="w-10 h-10 text-slate-300 stroke-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <p className="text-sm font-medium">{cameraError || "Initializing Camera Feed..."}</p>
+                            {cameraError ? (
+                                <>
+                                    <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-1">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-xs font-semibold text-rose-300 max-w-sm text-center leading-relaxed">{cameraError}</p>
+                                    <button
+                                        type="button"
+                                        onClick={restartCamera}
+                                        className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        <span>Retry Camera Access</span>
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="h-10 w-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                    <p className="text-sm font-semibold text-slate-200">Starting Camera Feed...</p>
+                                    <p className="text-xs text-slate-400">Please allow camera permissions if prompted</p>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

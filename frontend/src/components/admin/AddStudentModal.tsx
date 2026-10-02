@@ -46,30 +46,76 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
         };
     }, [facingMode, capturedImage]);
 
-    function startCamera() {
-        stopCamera();
+    // Synchronize video element srcObject when camera becomes active
+    useEffect(() => {
+        if (cameraActive && videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(console.warn);
+        }
+    }, [cameraActive]);
 
-        navigator.mediaDevices?.getUserMedia({
-            video: {
-                facingMode: facingMode,
-                width: { ideal: 1280, min: 640 },
-                height: { ideal: 720, min: 480 },
-            },
-            audio: false,
-        })
-            .then((stream) => {
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-                setCameraActive(true);
-                setCameraError("");
-            })
-            .catch((err) => {
-                console.warn("Camera access error:", err);
-                setCameraError("Camera unavailable. Please verify browser camera permissions.");
-                setCameraActive(false);
+    async function startCamera() {
+        stopCamera();
+        setCameraError("");
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const isSecure = window.isSecureContext !== false;
+            setCameraError(
+                !isSecure
+                    ? "Camera access requires HTTPS or localhost."
+                    : "Camera capture is not supported by your current browser."
+            );
+            return;
+        }
+
+        let stream: MediaStream | null = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280, min: 640 },
+                    height: { ideal: 720, min: 480 },
+                },
+                audio: false,
             });
+        } catch (err: any) {
+            console.warn("Primary constraints failed, falling back...", err);
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false,
+                });
+            } catch (fallbackErr: any) {
+                console.error("Camera access error:", fallbackErr);
+                const name = fallbackErr.name || "";
+                if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+                    setCameraError("Camera permission denied. Please allow camera permissions in your browser.");
+                } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+                    setCameraError("No webcam found on this device.");
+                } else if (name === "NotReadableError" || name === "TrackStartError") {
+                    setCameraError("Camera is currently in use by another app.");
+                } else {
+                    setCameraError(fallbackErr.message || "Camera unavailable.");
+                }
+                setCameraActive(false);
+                return;
+            }
+        }
+
+        if (!stream) return;
+        streamRef.current = stream;
+
+        const video = videoRef.current;
+        if (video) {
+            video.srcObject = stream;
+            try {
+                await video.play();
+            } catch (playErr) {
+                console.warn("Video play error:", playErr);
+            }
+        }
+        setCameraActive(true);
+        setCameraError("");
     }
 
     function stopCamera() {
@@ -310,29 +356,55 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             ) : (
                                 /* Live Camera State */
                                 <>
-                                    {cameraActive ? (
-                                        <div className="relative w-full max-w-xs rounded-xl overflow-hidden border border-slate-300 shadow-md bg-black">
-                                            <video
-                                                ref={videoRef}
-                                                autoPlay
-                                                playsInline
-                                                muted
-                                                className={`w-full h-48 object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
-                                            />
-                                            {/* Biometric Framing Guide */}
-                                            <div className="absolute inset-0 border-2 border-blue-400/60 rounded-full m-4 pointer-events-none" />
-                                            <div className="absolute bottom-2 inset-x-0 text-center">
-                                                <span className="text-[10px] font-semibold bg-black/70 text-blue-200 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                                                    Position face inside oval
-                                                </span>
+                                    <div className="relative w-full max-w-xs rounded-xl overflow-hidden border border-slate-300 shadow-md bg-black flex items-center justify-center min-h-[192px]">
+                                        {/* Video is ALWAYS mounted so videoRef is ready on first mount */}
+                                        <video
+                                            ref={videoRef}
+                                            autoPlay
+                                            playsInline
+                                            muted
+                                            className={`w-full h-48 object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""} ${cameraActive ? "block" : "hidden"}`}
+                                        />
+
+                                        {cameraActive && (
+                                            <>
+                                                {/* Biometric Framing Guide */}
+                                                <div className="absolute inset-0 border-2 border-blue-400/60 rounded-full m-4 pointer-events-none" />
+                                                <div className="absolute bottom-2 inset-x-0 text-center pointer-events-none">
+                                                    <span className="text-[10px] font-semibold bg-black/70 text-blue-200 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                                                        Position face inside oval
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {!cameraActive && (
+                                            <div className="text-center p-6 text-slate-400 space-y-2">
+                                                {cameraError ? (
+                                                    <>
+                                                        <div className="w-8 h-8 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-xs font-semibold text-rose-300 max-w-xs">{cameraError}</p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={startCamera}
+                                                            className="mt-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                                        >
+                                                            Retry Camera
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-1"></div>
+                                                        <p className="text-xs text-slate-300 font-medium">Starting camera...</p>
+                                                    </>
+                                                )}
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center p-6 text-slate-500">
-                                            <div className="h-10 w-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                            <p className="text-xs font-medium">{cameraError || "Initializing camera..."}</p>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
 
                                     <div className="mt-3 flex items-center gap-2">
                                         <button

@@ -297,7 +297,7 @@ export default function AdminDashboard() {
                             to="/admin/attendance"
                             className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors group"
                         >
-                            <span>Open Camera Kiosk</span>
+                            <span>Take Attendance with Camera</span>
                             <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                         </Link>
                     </div>

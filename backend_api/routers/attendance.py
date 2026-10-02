@@ -1276,7 +1276,7 @@ async def recognize_frame(
                             create_notification(
                                 student_id=matched_sid,
                                 title="Attendance Successfully Marked ✅",
-                                message=f"Kiosk face recognition verified your attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
+                                message=f"Live camera face recognition verified your attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
                                 notif_type="attendance_success",
                                 severity="success",
                                 action_url="/student/attendance",

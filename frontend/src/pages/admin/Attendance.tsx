@@ -40,13 +40,18 @@ export default function AttendancePage() {
     
     // Live Recognition Modal State
     const [showScannerModal, setShowScannerModal] = useState(false);
-    const [isKioskFullscreen, setIsKioskFullscreen] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const [scannerMode, setScannerMode] = useState<ScannerMode>("SOLO");
     const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
     const [cameraActive, setCameraActive] = useState(false);
     const [cameraError, setCameraError] = useState("");
+    const [cameraRetryCount, setCameraRetryCount] = useState(0);
     const [isScanningActive, setIsScanningActive] = useState(true);
-    const [selectedStudentToRecognize, setSelectedStudentToRecognize] = useState<string>("");
+    const [selectedStudentToRecognize, setSelectedStudentToRecognize] = useState<string>("AUTO");
+
+    const restartCamera = useCallback(() => {
+        setCameraRetryCount((c) => c + 1);
+    }, []);
     
     // Solo Mode Detected Student
     const [detectedStudent, setDetectedStudent] = useState<{
@@ -86,8 +91,8 @@ export default function AttendancePage() {
             setStudents(studentsRes);
             setCurrentSession(sessionRes.session);
             setSessionRemainingSecs(sessionRes.session.seconds_remaining);
-            if (studentsRes.length > 0 && !selectedStudentToRecognize) {
-                setSelectedStudentToRecognize(studentsRes[0].student_id);
+            if (!selectedStudentToRecognize) {
+                setSelectedStudentToRecognize("AUTO");
             }
         } catch {
             setError("Failed to load attendance records");
@@ -154,43 +159,102 @@ export default function AttendancePage() {
         setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
     }
 
-    // Camera handling for Live Recognition Scanner
+    // Camera handling for Live Recognition Scanner (with resilient device fallbacks)
     useEffect(() => {
-        if (showScannerModal) {
+        if (!showScannerModal) {
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((t) => t.stop());
+                streamRef.current = null;
             }
-
-            const constraints: MediaStreamConstraints = {
-                video: {
-                    facingMode: facingMode,
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                }
-            };
-
-            navigator.mediaDevices?.getUserMedia(constraints)
-                .then((stream) => {
-                    streamRef.current = stream;
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = stream;
-                    }
-                    setCameraActive(true);
-                    setCameraError("");
-                })
-                .catch((err) => {
-                    console.warn("Camera access failed", err);
-                    setCameraError("Unable to access webcam. Please check permissions or select a student to test.");
-                    setCameraActive(false);
-                });
+            setCameraActive(false);
+            return;
         }
 
+        let isMounted = true;
+        setCameraError("");
+        setCameraActive(false);
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const isSecure = window.isSecureContext !== false;
+            setCameraError(
+                !isSecure
+                    ? "Camera access requires HTTPS or localhost. If accessing via network IP, please use HTTPS."
+                    : "Camera capture is not supported by your current browser."
+            );
+            return;
+        }
+
+        async function initCamera() {
+            let stream: MediaStream | null = null;
+            try {
+                // Primary attempt: requested facingMode and ideal 640x480 resolution
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                    },
+                    audio: false,
+                });
+            } catch (err: any) {
+                console.warn("Primary camera constraints failed, attempting fallback...", err);
+                try {
+                    // Fallback attempt: generic video (works on external webcams, virtual cams, and strict drivers)
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false,
+                    });
+                } catch (fallbackErr: any) {
+                    if (!isMounted) return;
+                    console.error("All camera access attempts failed:", fallbackErr);
+                    const name = fallbackErr.name || "";
+                    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+                        setCameraError("Camera permission denied. Click the lock/camera icon in your browser address bar to allow camera access.");
+                    } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+                        setCameraError("No webcam found on this device. Please connect an external camera and retry.");
+                    } else if (name === "NotReadableError" || name === "TrackStartError") {
+                        setCameraError("Camera is currently in use by another application (Zoom, Teams, or another tab). Please close it and retry.");
+                    } else {
+                        setCameraError(fallbackErr.message || "Failed to start camera feed. Please check camera permissions.");
+                    }
+                    setCameraActive(false);
+                    return;
+                }
+            }
+
+            if (!isMounted || !stream) return;
+            streamRef.current = stream;
+
+            const video = videoRef.current;
+            if (video) {
+                video.srcObject = stream;
+                try {
+                    await video.play();
+                } catch (playErr) {
+                    console.warn("Autoplay promise rejected, awaiting metadata:", playErr);
+                }
+            }
+            setCameraActive(true);
+        }
+
+        initCamera();
+
         return () => {
+            isMounted = false;
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((t) => t.stop());
+                streamRef.current = null;
             }
         };
-    }, [showScannerModal, facingMode]);
+    }, [showScannerModal, facingMode, cameraRetryCount]);
+
+    // Guarantee stream attachment to video element whenever modal opens or camera becomes active
+    useEffect(() => {
+        if (showScannerModal && cameraActive && videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(console.warn);
+        }
+    }, [showScannerModal, cameraActive]);
 
     // Live continuous frame processing loop for Solo & Group
     useEffect(() => {
@@ -269,20 +333,45 @@ export default function AttendancePage() {
                     const timeStr = new Date().toLocaleTimeString();
 
                     // Solo Mode Handler
-                    if (scannerMode === "SOLO" && result.recognized && result.student_id) {
-                        setDetectedStudent({
-                            studentId: result.student_id,
-                            name: result.name || result.student_id,
-                            department: result.department || "Computer Science",
-                            confidence: result.confidence || 96.5,
-                            status: result.already_marked ? "Already Marked Today" : "Marked Present ✅",
-                            timestamp: timeStr
-                        });
+                    if (scannerMode === "SOLO") {
+                        if (result.recognized && result.student_id) {
+                            const targetStudent = students.find((s) => s.student_id === selectedStudentToRecognize);
+                            const isTargetMatch = !selectedStudentToRecognize || selectedStudentToRecognize === "AUTO" || result.student_id === selectedStudentToRecognize;
 
-                        if (lastRecognizedStudent.current !== result.student_id) {
-                            lastRecognizedStudent.current = result.student_id;
-                            showNotification(`🎉 ${result.name} (${result.student_id}) recognized and synchronized!`);
-                            await load();
+                            if (isTargetMatch) {
+                                setDetectedStudent({
+                                    studentId: result.student_id,
+                                    name: result.name || result.student_id,
+                                    department: result.department || "Computer Science",
+                                    confidence: result.confidence || 96.5,
+                                    status: result.already_marked ? "Already Marked Today" : "Marked Present ✅",
+                                    timestamp: timeStr
+                                });
+
+                                if (lastRecognizedStudent.current !== result.student_id) {
+                                    lastRecognizedStudent.current = result.student_id;
+                                    showNotification(`🎉 ${result.name} (${result.student_id}) recognized and synchronized!`);
+                                    await load();
+                                }
+                            } else {
+                                setDetectedStudent({
+                                    studentId: result.student_id,
+                                    name: result.name || result.student_id,
+                                    department: result.department || "Computer Science",
+                                    confidence: result.confidence || 96.5,
+                                    status: `⚠️ Face does not match target (${targetStudent?.name || selectedStudentToRecognize})`,
+                                    timestamp: timeStr
+                                });
+                            }
+                        } else if (result.face_detected) {
+                            setDetectedStudent({
+                                studentId: "",
+                                name: "Unrecognized Face",
+                                department: "Unknown",
+                                confidence: result.confidence || 0,
+                                status: "Face detected, identifying...",
+                                timestamp: timeStr
+                            });
                         }
                     }
 
@@ -327,13 +416,18 @@ export default function AttendancePage() {
         return () => clearInterval(scanInterval);
     }, [showScannerModal, cameraActive, isScanningActive, scannerMode, load]);
 
-    // Mark single student attendance (manual quick action)
+    // Mark single student attendance (manual administrative override)
     async function handleQuickMark(studentId: string, studentName?: string) {
         const displayName = studentName || studentId;
+        const confirmed = window.confirm(
+            `Mark ${displayName} (${studentId}) as Present manually?\n\nNote: This is a manual override that bypasses face recognition. Only use this if the student is verified to be present.`
+        );
+        if (!confirmed) return;
+
         try {
             setActionLoadingId(studentId);
             await markAttendance(studentId);
-            showNotification(`✅ Attendance marked for ${displayName}`);
+            showNotification(`✅ Manual attendance marked for ${displayName}`);
             await load();
         } catch {
             showNotification(`❌ Could not mark attendance for ${studentId}`);
@@ -342,49 +436,15 @@ export default function AttendancePage() {
         }
     }
 
-    // Manual Verify / Simulate Scan
-    async function handleSimulateScan() {
-        const student = students.find((s) => s.student_id === selectedStudentToRecognize) || students[0];
-        if (!student) return;
-
-        const confidence = (94.0 + Math.random() * 5.5).toFixed(1);
-        const timeStr = new Date().toLocaleTimeString();
-
+    // Confirm and record attendance for student actually recognized by camera
+    async function handleConfirmRecognized() {
+        if (!detectedStudent || !detectedStudent.studentId) return;
         try {
-            await markAttendance(student.student_id);
-            setDetectedStudent({
-                studentId: student.student_id,
-                name: student.name,
-                department: student.department || "Computer Science",
-                confidence: parseFloat(confidence),
-                status: "Marked Present ✅",
-                timestamp: timeStr
-            });
-
-            if (scannerMode === "GROUP") {
-                setGroupSessionRecognized((prev) => [
-                    {
-                        studentId: student.student_id,
-                        name: student.name,
-                        department: student.department || "Computer Science",
-                        time: timeStr,
-                        confidence: parseFloat(confidence)
-                    },
-                    ...prev.filter((p) => p.studentId !== student.student_id)
-                ]);
-            }
-
-            showNotification(`✅ ${student.name} synchronized to Present list!`);
+            await markAttendance(detectedStudent.studentId);
+            showNotification(`✅ Attendance confirmed for ${detectedStudent.name}!`);
             await load();
         } catch {
-            setDetectedStudent({
-                studentId: student.student_id,
-                name: student.name,
-                department: student.department || "Computer Science",
-                confidence: parseFloat(confidence),
-                status: "Already Marked Today",
-                timestamp: timeStr
-            });
+            showNotification(`ℹ️ ${detectedStudent.name} is already marked present today.`);
         }
     }
 
@@ -941,7 +1001,7 @@ export default function AttendancePage() {
                                                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                         </svg>
-                                                        <span>Present</span>
+                                                        <span>Manual Present</span>
                                                     </>
                                                 )}
                                             </button>
@@ -1001,7 +1061,7 @@ export default function AttendancePage() {
                                                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                                     </svg>
-                                                                    <span>Mark Present</span>
+                                                                    <span>Manual Present</span>
                                                                 </>
                                                             )}
                                                         </button>
@@ -1180,7 +1240,7 @@ export default function AttendancePage() {
                                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                     </svg>
-                                                    <span>Present</span>
+                                                    <span>Manual Present</span>
                                                 </>
                                             )}
                                         </button>
@@ -1237,7 +1297,7 @@ export default function AttendancePage() {
                                                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                                 </svg>
-                                                                <span>Mark Present</span>
+                                                                <span>Manual Present</span>
                                                             </>
                                                         )}
                                                     </button>
@@ -1387,19 +1447,19 @@ export default function AttendancePage() {
             {/* DEDICATED CAMERA ATTENDANCE MODAL */}
             {showScannerModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fade-in">
-                    <div className={`w-full ${isKioskFullscreen ? "fixed inset-0 max-w-none h-screen rounded-none z-[60] overflow-y-auto m-0 p-4" : "max-w-2xl rounded-2xl"} bg-white border border-slate-200 shadow-2xl overflow-hidden space-y-4 my-auto transition-all`}>
+                    <div className={`w-full ${isFullscreen ? "fixed inset-0 max-w-none h-screen rounded-none z-[60] overflow-y-auto m-0 p-4" : "max-w-2xl rounded-2xl"} bg-white border border-slate-200 shadow-2xl overflow-hidden space-y-4 my-auto transition-all`}>
                         {/* Modal Header */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 gap-3">
                             <div className="flex items-center gap-3">
                                 <span className={`h-3 w-3 rounded-full animate-ping ${scannerMode === "SOLO" ? "bg-emerald-600" : "bg-blue-600"}`} />
                                 <div>
                                     <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-wide uppercase">
-                                        {scannerMode === "SOLO" ? "Solo Face Attendance" : "Group Multi-Face Attendance"}
+                                        {scannerMode === "SOLO" ? "Single Student Face Scan" : "Group Multi-Student Scan"}
                                     </h2>
                                     <p className="text-[11px] text-slate-500">
                                         {scannerMode === "SOLO"
-                                            ? "1-on-1 check-in kiosk mode"
-                                            : "Multi-student simultaneous scanning"}
+                                            ? "Verifies one student face at a time"
+                                            : "Scans multiple student faces together"}
                                     </p>
                                 </div>
                             </div>
@@ -1441,22 +1501,22 @@ export default function AttendancePage() {
                                     <span className="hidden sm:inline">{facingMode === "user" ? "Front" : "Back"}</span>
                                 </button>
 
-                                {/* Fullscreen Kiosk Mode Toggle */}
+                                {/* Fullscreen Toggle */}
                                 <button
-                                    onClick={() => setIsKioskFullscreen(!isKioskFullscreen)}
-                                    title={isKioskFullscreen ? "Exit Fullscreen Kiosk" : "Fullscreen Kiosk Mode"}
+                                    onClick={() => setIsFullscreen(!isFullscreen)}
+                                    title={isFullscreen ? "Exit Fullscreen" : "Full Screen View"}
                                     className="p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs flex items-center gap-1 font-semibold shadow-xs cursor-pointer"
                                 >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                                     </svg>
-                                    <span className="hidden sm:inline">{isKioskFullscreen ? "Window" : "Kiosk"}</span>
+                                    <span className="hidden sm:inline">{isFullscreen ? "Window" : "Full Screen"}</span>
                                 </button>
 
                                 <button
                                     onClick={() => {
                                         setShowScannerModal(false);
-                                        setIsKioskFullscreen(false);
+                                        setIsFullscreen(false);
                                         setDetectedStudent(null);
                                         setGroupDetectedFaces([]);
                                     }}
@@ -1470,80 +1530,103 @@ export default function AttendancePage() {
                         {/* Scanner Viewfinder Box */}
                         <div className="p-4 sm:p-6 space-y-4">
                             <div className="relative rounded-2xl border-2 border-slate-300 bg-black overflow-hidden flex flex-col items-center justify-center min-h-[260px] sm:min-h-[320px] shadow-lg">
-                                {cameraActive ? (
-                                    <div className="relative w-full h-64 sm:h-80 overflow-hidden flex items-center justify-center">
-                                        <video
-                                            ref={videoRef}
-                                            autoPlay
-                                            playsInline
-                                            muted
-                                            className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""}`}
-                                        />
+                                <div className="relative w-full h-64 sm:h-80 overflow-hidden flex items-center justify-center">
+                                    {/* Video element is ALWAYS mounted in DOM to guarantee videoRef is ready on first mount */}
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                                    />
 
-                                        <canvas
-                                            ref={overlayCanvasRef}
-                                            className={`absolute inset-0 w-full h-full object-cover pointer-events-none ${facingMode === "user" ? "mirror" : ""}`}
-                                        />
+                                    <canvas
+                                        ref={overlayCanvasRef}
+                                        className={`absolute inset-0 w-full h-full object-cover pointer-events-none ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                                    />
 
-                                        {scannerMode === "SOLO" && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                                <div className="relative w-40 sm:w-48 h-48 sm:h-56 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-between p-2 shadow-lg animate-pulse">
-                                                    <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-emerald-300" />
-                                                    <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-emerald-300" />
-                                                    <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-emerald-300" />
-                                                    <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-emerald-300" />
+                                    {cameraActive && scannerMode === "SOLO" && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                            <div className="relative w-40 sm:w-48 h-48 sm:h-56 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-between p-2 shadow-lg animate-pulse">
+                                                <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-emerald-300" />
+                                                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-emerald-300" />
+                                                <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-emerald-300" />
+                                                <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-emerald-300" />
 
-                                                    <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500 text-black shadow">
-                                                        ● SOLO TARGET
-                                                    </span>
-                                                </div>
+                                                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500 text-black shadow">
+                                                    ● SOLO TARGET
+                                                </span>
+                                            </div>
 
-                                                {detectedStudent && (
-                                                    <div className="mt-2 sm:mt-3 bg-white/95 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3 sm:px-4 py-1.5 sm:py-2 text-center shadow-lg animate-fade-in">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <span className="text-emerald-700 font-bold text-xs sm:text-sm">
-                                                                {detectedStudent.name}
-                                                            </span>
+                                            {detectedStudent && (
+                                                <div className="mt-2 sm:mt-3 bg-white/95 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3 sm:px-4 py-1.5 sm:py-2 text-center shadow-lg animate-fade-in">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <span className="text-emerald-700 font-bold text-xs sm:text-sm">
+                                                            {detectedStudent.name}
+                                                        </span>
+                                                        {detectedStudent.studentId && (
                                                             <span className="text-slate-700 font-mono text-[10px] sm:text-xs bg-slate-100 px-1.5 py-0.5 rounded border border-slate-300 font-semibold">
                                                                 {detectedStudent.studentId}
                                                             </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-center gap-2 text-[10px] sm:text-[11px] text-emerald-600 font-semibold mt-0.5">
-                                                            <span>Match: {detectedStudent.confidence}%</span>
-                                                            <span>•</span>
-                                                            <span className="text-emerald-700 font-bold">{detectedStudent.status}</span>
-                                                        </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                    <div className="flex items-center justify-center gap-2 text-[10px] sm:text-[11px] text-emerald-600 font-semibold mt-0.5">
+                                                        {detectedStudent.confidence > 0 && <span>Match: {detectedStudent.confidence}% • </span>}
+                                                        <span className="text-emerald-700 font-bold">{detectedStudent.status}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
-                                        {scannerMode === "GROUP" && (
-                                            <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-blue-200 text-blue-700 text-[11px] font-bold shadow-sm">
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                                    </svg>
-                                                    <span>Faces: {groupDetectedFaces.length}</span>
-                                                </span>
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-emerald-200 text-emerald-700 text-[11px] font-bold shadow-sm">
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                    <span>Recognized: {groupDetectedFaces.filter((f) => f.recognized).length}</span>
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="text-center p-8 text-slate-400 space-y-2">
-                                        <svg className="w-12 h-12 mx-auto text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        <p className="text-sm font-medium">{cameraError || "Initializing Camera Feed..."}</p>
-                                    </div>
-                                )}
+                                    {cameraActive && scannerMode === "GROUP" && (
+                                        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-blue-200 text-blue-700 text-[11px] font-bold shadow-sm">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                                </svg>
+                                                <span>Faces: {groupDetectedFaces.length}</span>
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-emerald-200 text-emerald-700 text-[11px] font-bold shadow-sm">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span>Recognized: {groupDetectedFaces.filter((f) => f.recognized).length}</span>
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {!cameraActive && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3 bg-slate-950">
+                                            {cameraError ? (
+                                                <>
+                                                    <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-1">
+                                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                        </svg>
+                                                    </div>
+                                                    <p className="text-xs font-semibold text-rose-300 max-w-sm text-center leading-relaxed">{cameraError}</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={restartCamera}
+                                                        className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        <span>Retry Camera Access</span>
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="h-10 w-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                                    <p className="text-sm font-semibold text-slate-200">Starting Camera Feed...</p>
+                                                    <p className="text-xs text-slate-400">Please allow camera permissions if prompted</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Solo Mode Result Banner */}
@@ -1646,25 +1729,51 @@ export default function AttendancePage() {
                                     </span>
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-slate-200">
-                                    <select
-                                        value={selectedStudentToRecognize}
-                                        onChange={(e) => setSelectedStudentToRecognize(e.target.value)}
-                                        className="flex-1 px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 font-medium cursor-pointer"
-                                    >
-                                        {students.map((s) => (
-                                            <option key={s.student_id} value={s.student_id}>
-                                                {s.name} ({s.student_id})
-                                            </option>
-                                        ))}
-                                    </select>
+                                <div className="space-y-2 pt-2 border-t border-slate-200">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <div className="flex-1">
+                                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                                Camera Target Mode:
+                                            </label>
+                                            <select
+                                                value={selectedStudentToRecognize}
+                                                onChange={(e) => setSelectedStudentToRecognize(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 font-medium cursor-pointer"
+                                            >
+                                                <option value="AUTO">✨ Auto-Detect Any Registered Student (1:N)</option>
+                                                <optgroup label="Target Specific Student (1:1 Verification)">
+                                                    {students.map((s) => (
+                                                        <option key={s.student_id} value={s.student_id}>
+                                                            Target: {s.name} ({s.student_id})
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            </select>
+                                        </div>
 
-                                    <button
-                                        onClick={handleSimulateScan}
-                                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs cursor-pointer whitespace-nowrap text-center"
-                                    >
-                                        Mark Selected
-                                    </button>
+                                        <div className="sm:self-end">
+                                            <button
+                                                type="button"
+                                                onClick={handleConfirmRecognized}
+                                                disabled={!detectedStudent || !detectedStudent.studentId}
+                                                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs transition-all shadow-xs cursor-pointer whitespace-nowrap text-center flex items-center justify-center gap-1.5"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span>
+                                                    {detectedStudent && detectedStudent.studentId
+                                                        ? `Mark Present: ${detectedStudent.name}`
+                                                        : "Waiting for Camera Face..."}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500">
+                                        {selectedStudentToRecognize === "AUTO"
+                                            ? "The camera automatically identifies any student standing in front of it and logs attendance."
+                                            : `The camera will verify that the person in front of the lens strictly matches student ${selectedStudentToRecognize}.`}
+                                    </p>
                                 </div>
                             </div>
                         </div>
