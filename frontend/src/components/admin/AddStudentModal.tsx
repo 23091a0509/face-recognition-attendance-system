@@ -212,8 +212,10 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                 {/* Modal Header */}
                 <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center font-bold text-lg">
-                            👤
+                        <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
                         </div>
                         <div>
                             <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Add New Student</h2>
@@ -223,8 +225,11 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                     <button
                         onClick={onClose}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                        aria-label="Close"
                     >
-                        ✕
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
@@ -318,8 +323,12 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                 2. Face Biometric Capture
                             </h3>
-                            <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                📸 1 Perfect Photo
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span>1 Face Photo</span>
                             </span>
                         </div>
 
@@ -334,8 +343,11 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                                             alt="Captured student face"
                                             className="w-full h-48 object-cover"
                                         />
-                                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-                                            ✓ Captured
+                                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow inline-flex items-center gap-1">
+                                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span>Captured</span>
                                         </div>
                                     </div>
 
@@ -347,9 +359,12 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                                         <button
                                             type="button"
                                             onClick={retakePhoto}
-                                            className="ml-2 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                                            className="ml-2 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1"
                                         >
-                                            🔄 Retake
+                                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <span>Retake</span>
                                         </button>
                                     </div>
                                 </div>
@@ -423,10 +438,13 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                                         <button
                                             type="button"
                                             onClick={toggleFacingMode}
-                                            className="p-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs cursor-pointer transition-colors shadow-sm"
+                                            className="p-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5"
                                             title="Switch Camera (Front/Back)"
                                         >
-                                            🔄 {facingMode === "user" ? "Front" : "Back"}
+                                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <span>{facingMode === "user" ? "Front" : "Back"}</span>
                                         </button>
                                     </div>
                                 </>
@@ -437,9 +455,11 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                     {/* Biometric Validation / Duplicate Face Alert Box */}
                     {formError && (
                         <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2.5 animate-fade-in shadow-sm">
-                            <span className="text-lg leading-none">⚠️</span>
+                            <svg className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
                             <div className="space-y-0.5">
-                                <span className="font-bold block text-rose-900">Biometric Registration Alert</span>
+                                <span className="font-bold block text-rose-900">Registration Alert</span>
                                 <span className="text-rose-700 text-xs leading-relaxed block">{formError}</span>
                             </div>
                         </div>

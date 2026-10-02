@@ -445,7 +445,7 @@ export default function WebcamPage() {
     const finalReason = studentSessionStatus?.reason || "Attendance session completed";
 
     // =========================================================================
-    // 🌟 VIEW A: SESSION ENDED (White Theme)
+    // VIEW A: SESSION ENDED
     // =========================================================================
     if (sessionEnded) {
         return (
@@ -504,8 +504,8 @@ export default function WebcamPage() {
                                     </div>
                                     <div className="flex justify-between items-center text-slate-500">
                                         <span className="font-sans">Session Halves:</span>
-                                        <span className="text-slate-700">
-                                            {studentSessionStatus.halves_attended?.first_half ? "✓ First Half" : "✗ First Half"} • {studentSessionStatus.halves_attended?.second_half ? "✓ Second Half" : "✗ Second Half"}
+                                        <span className="text-slate-700 font-medium">
+                                            {studentSessionStatus.halves_attended?.first_half ? "First Half (Attended)" : "First Half (Missed)"} • {studentSessionStatus.halves_attended?.second_half ? "Second Half (Attended)" : "Second Half (Missed)"}
                                         </span>
                                     </div>
                                 </>
@@ -542,7 +542,7 @@ export default function WebcamPage() {
     }
 
     // =========================================================================
-    // 🌟 VIEW B: LIVE ATTENDANCE (White Theme Kiosk)
+    // VIEW B: LIVE ATTENDANCE (Live Camera View)
     // =========================================================================
     return (
         <div className="space-y-6 max-w-xl mx-auto animate-fade-in pb-12 text-slate-800">
@@ -768,16 +768,16 @@ export default function WebcamPage() {
                     </div>
                 </div>
 
-                {/* 2. ✓ Attendance Marked indicator */}
+                {/* 2. Attendance Marked indicator */}
                 <div className={`p-4 rounded-2xl border transition-all flex items-center gap-3 ${
                     attendancePresent
                         ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                         : "bg-white border-slate-200 text-slate-500"
                 }`}>
-                    <span className={`text-base font-bold flex-shrink-0 ${
-                        attendancePresent ? "text-emerald-600" : "text-slate-300"
-                    }`}>
-                        ✓
+                    <span className="flex-shrink-0">
+                        <svg className={`w-5 h-5 ${attendancePresent ? "text-emerald-600" : "text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
                     </span>
                     <div>
                         <div className="text-xs font-bold font-mono tracking-wide">

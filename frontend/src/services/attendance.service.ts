@@ -150,10 +150,17 @@ export interface AdminSettingsData {
     late_after_time?: string;
 }
 
-export async function recognizeFrame(image: string, confidenceThreshold?: number): Promise<FrameRecognitionResult> {
-    const payload: { image: string; confidence_threshold?: number } = { image };
+export async function recognizeFrame(
+    image: string,
+    confidenceThreshold?: number,
+    targetStudentId?: string
+): Promise<FrameRecognitionResult> {
+    const payload: { image: string; confidence_threshold?: number; target_student_id?: string } = { image };
     if (confidenceThreshold !== undefined) {
         payload.confidence_threshold = confidenceThreshold;
+    }
+    if (targetStudentId && targetStudentId !== "AUTO") {
+        payload.target_student_id = targetStudentId;
     }
     const res = await api.post("/attendance/recognize-frame", payload);
     return res.data;

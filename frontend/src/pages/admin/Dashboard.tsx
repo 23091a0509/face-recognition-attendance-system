@@ -418,12 +418,18 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                         <span className="text-[11px] text-slate-500 font-medium block">Camera Hardware</span>
-                        <span className="text-sm font-bold text-emerald-700 mt-1 block">Connected ✓</span>
+                        <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 mt-1">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Connected
+                        </span>
                     </div>
 
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                         <span className="text-[11px] text-slate-500 font-medium block">Face Scanner</span>
-                        <span className="text-sm font-bold text-emerald-700 mt-1 block">Running ✓</span>
+                        <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 mt-1">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                            Active
+                        </span>
                     </div>
 
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">

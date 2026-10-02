@@ -245,7 +245,7 @@ def trigger_low_attendance_check(
             if not already_warned_today:
                 create_notification(
                     student_id=sid,
-                    title="Low-Attendance Warning ⚠️",
+                    title="Low-Attendance Warning",
                     message=(
                         f"Dear {name}, your attendance in {dept or 'your department'} is currently {rate}% "
                         f"({attended}/{total_dates} classes attended), which is below the required {req.threshold_percentage}%. "
@@ -285,7 +285,7 @@ def send_attendance_correction(
     """
     success = create_notification(
         student_id=req.student_id,
-        title="Attendance Record Corrected ✏️",
+        title="Attendance Record Corrected",
         message=f"Your attendance record for {req.date} has been updated to '{req.status}'. Note: {req.note}",
         notif_type="correction",
         severity="info",

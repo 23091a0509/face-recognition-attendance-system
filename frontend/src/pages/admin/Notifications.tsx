@@ -319,14 +319,22 @@ export default function AdminNotificationsPage() {
             {successMsg && (
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium flex items-center justify-between animate-fade-in shadow-xs">
                     <span>{successMsg}</span>
-                    <button onClick={() => setSuccessMsg("")} className="text-emerald-700 hover:text-emerald-900 font-bold">✕</button>
+                    <button onClick={() => setSuccessMsg("")} className="text-emerald-700 hover:text-emerald-900 cursor-pointer p-0.5" aria-label="Dismiss">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             )}
 
             {error && (
                 <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center justify-between animate-fade-in shadow-xs">
                     <span>{error}</span>
-                    <button onClick={() => setError("")} className="text-rose-700 hover:text-rose-900 font-bold">✕</button>
+                    <button onClick={() => setError("")} className="text-rose-700 hover:text-rose-900 cursor-pointer p-0.5" aria-label="Dismiss">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             )}
 

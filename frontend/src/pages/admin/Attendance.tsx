@@ -142,7 +142,7 @@ export default function AttendancePage() {
         e.preventDefault();
         try {
             await createSession(newSessionForm);
-            showNotification("✅ New session created and activated!");
+            showNotification("New session created and activated successfully");
             setShowNewSessionModal(false);
             await load();
         } catch (err: any) {
@@ -278,7 +278,10 @@ export default function AttendancePage() {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const base64Image = canvas.toDataURL("image/jpeg", 0.90);
 
-                const result: FrameRecognitionResult = await recognizeFrame(base64Image);
+                const targetId = (scannerMode === "SOLO" && selectedStudentToRecognize && selectedStudentToRecognize !== "AUTO")
+                    ? selectedStudentToRecognize
+                    : undefined;
+                const result: FrameRecognitionResult = await recognizeFrame(base64Image, undefined, targetId);
 
                 // Draw overlay boxes on Group Scanner Canvas
                 if (overlay) {
@@ -311,7 +314,7 @@ export default function AttendancePage() {
                                         oCtx.fillText(`${face.name || "Student"} (${face.student_id})`, x1 + 4, y2 + 18);
                                         oCtx.fillStyle = "#34d399";
                                         oCtx.font = "9px monospace";
-                                        oCtx.fillText(`${face.confidence}% • Present ✓`, x1 + 4, y2 + 29);
+                                        oCtx.fillText(`${face.confidence}% • Present`, x1 + 4, y2 + 29);
                                     } else {
                                         oCtx.strokeStyle = "#eab308";
                                         oCtx.lineWidth = 2;
@@ -334,7 +337,16 @@ export default function AttendancePage() {
 
                     // Solo Mode Handler
                     if (scannerMode === "SOLO") {
-                        if (result.recognized && result.student_id) {
+                        if (result.mismatch) {
+                            setDetectedStudent({
+                                studentId: result.student_id || selectedStudentToRecognize,
+                                name: result.name || "Target Student",
+                                department: "Target Verification",
+                                confidence: result.confidence || 0,
+                                status: result.message || `Face does not match target (${selectedStudentToRecognize})`,
+                                timestamp: timeStr
+                            });
+                        } else if (result.recognized && result.student_id) {
                             const targetStudent = students.find((s) => s.student_id === selectedStudentToRecognize);
                             const isTargetMatch = !selectedStudentToRecognize || selectedStudentToRecognize === "AUTO" || result.student_id === selectedStudentToRecognize;
 
@@ -344,13 +356,13 @@ export default function AttendancePage() {
                                     name: result.name || result.student_id,
                                     department: result.department || "Computer Science",
                                     confidence: result.confidence || 96.5,
-                                    status: result.already_marked ? "Already Marked Today" : "Marked Present ✅",
+                                    status: result.already_marked ? "Already Marked Today" : "Marked Present",
                                     timestamp: timeStr
                                 });
 
                                 if (lastRecognizedStudent.current !== result.student_id) {
                                     lastRecognizedStudent.current = result.student_id;
-                                    showNotification(`🎉 ${result.name} (${result.student_id}) recognized and synchronized!`);
+                                    showNotification(`${result.name} (${result.student_id}) recognized and attendance recorded`);
                                     await load();
                                 }
                             } else {
@@ -359,7 +371,7 @@ export default function AttendancePage() {
                                     name: result.name || result.student_id,
                                     department: result.department || "Computer Science",
                                     confidence: result.confidence || 96.5,
-                                    status: `⚠️ Face does not match target (${targetStudent?.name || selectedStudentToRecognize})`,
+                                    status: `Face does not match target (${targetStudent?.name || selectedStudentToRecognize})`,
                                     timestamp: timeStr
                                 });
                             }
@@ -400,7 +412,7 @@ export default function AttendancePage() {
                             });
 
                             if (newlyRecognized) {
-                                showNotification(`👥 Group batch: ${recognizedInFrame.length} student(s) marked present!`);
+                                showNotification(`Group scan: ${recognizedInFrame.length} student(s) marked present`);
                                 await load();
                             }
                         }
@@ -414,7 +426,7 @@ export default function AttendancePage() {
         }, 750);
 
         return () => clearInterval(scanInterval);
-    }, [showScannerModal, cameraActive, isScanningActive, scannerMode, load]);
+    }, [showScannerModal, cameraActive, isScanningActive, scannerMode, selectedStudentToRecognize, load]);
 
     // Mark single student attendance (manual administrative override)
     async function handleQuickMark(studentId: string, studentName?: string) {
@@ -427,10 +439,10 @@ export default function AttendancePage() {
         try {
             setActionLoadingId(studentId);
             await markAttendance(studentId);
-            showNotification(`✅ Manual attendance marked for ${displayName}`);
+            showNotification(`Manual attendance marked for ${displayName}`);
             await load();
         } catch {
-            showNotification(`❌ Could not mark attendance for ${studentId}`);
+            showNotification(`Could not mark attendance for ${studentId}`);
         } finally {
             setActionLoadingId(null);
         }
@@ -441,10 +453,10 @@ export default function AttendancePage() {
         if (!detectedStudent || !detectedStudent.studentId) return;
         try {
             await markAttendance(detectedStudent.studentId);
-            showNotification(`✅ Attendance confirmed for ${detectedStudent.name}!`);
+            showNotification(`Attendance confirmed for ${detectedStudent.name}`);
             await load();
         } catch {
-            showNotification(`ℹ️ ${detectedStudent.name} is already marked present today.`);
+            showNotification(`${detectedStudent.name} is already marked present today.`);
         }
     }
 
@@ -624,9 +636,12 @@ export default function AttendancePage() {
                             <h3 className="text-base font-bold text-slate-900">Create Attendance Session</h3>
                             <button
                                 onClick={() => setShowNewSessionModal(false)}
-                                className="text-slate-400 hover:text-slate-700 cursor-pointer font-bold"
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                                aria-label="Close"
                             >
-                                ✕
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
                         </div>
                         <form onSubmit={handleCreateSessionSubmit} className="space-y-4 text-xs">
@@ -1520,9 +1535,12 @@ export default function AttendancePage() {
                                         setDetectedStudent(null);
                                         setGroupDetectedFaces([]);
                                     }}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition-colors text-sm font-bold cursor-pointer"
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    aria-label="Close"
                                 >
-                                    ✕
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
                                 </button>
                             </div>
                         </div>
@@ -1740,7 +1758,7 @@ export default function AttendancePage() {
                                                 onChange={(e) => setSelectedStudentToRecognize(e.target.value)}
                                                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 font-medium cursor-pointer"
                                             >
-                                                <option value="AUTO">✨ Auto-Detect Any Registered Student (1:N)</option>
+                                                <option value="AUTO">Auto-Detect Any Registered Student (1:N)</option>
                                                 <optgroup label="Target Specific Student (1:1 Verification)">
                                                     {students.map((s) => (
                                                         <option key={s.student_id} value={s.student_id}>

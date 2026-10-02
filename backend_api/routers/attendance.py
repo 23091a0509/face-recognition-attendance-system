@@ -759,7 +759,7 @@ def mark_attendance(
 
     create_notification(
         student_id=student_id,
-        title="Attendance Successfully Marked ✅",
+        title="Attendance Successfully Marked",
         message=f"Attendance was recorded for {today} at {time_now} via manual check-in.",
         notif_type="attendance_success",
         severity="success",
@@ -835,6 +835,7 @@ def _load_gallery_from_db(conn):
 class FrameRecognitionRequest(BaseModel):
     image: str
     confidence_threshold: Optional[float] = None
+    target_student_id: Optional[str] = None
 
 @router.post("/recognize-frame")
 async def recognize_frame(
@@ -1123,7 +1124,7 @@ async def recognize_frame(
                             conn.commit()
                             create_notification(
                                 student_id=logged_in_sid,
-                                title="Attendance Successfully Logged ✅",
+                                title="Attendance Successfully Logged",
                                 message=f"Biometric face recognition verified attendance on {today} at {time_now} ({evaluated_status}).",
                                 notif_type="attendance_success",
                                 severity="success",
@@ -1151,7 +1152,7 @@ async def recognize_frame(
                             conn.commit()
                             create_notification(
                                 student_id=logged_in_sid,
-                                title="Attendance Successfully Marked ✅",
+                                title="Attendance Successfully Marked",
                                 message=f"Biometric face recognition verified attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
                                 notif_type="attendance_success",
                                 severity="success",
@@ -1180,7 +1181,7 @@ async def recognize_frame(
                     "already_marked": already_marked,
                     "marked_time": record_time,
                     "liveness_passed": True,
-                    "message": "Attendance marked successfully! ✅" if not already_marked else f"Attendance already recorded today at {record_time}"
+                    "message": "Attendance marked successfully" if not already_marked else f"Attendance already recorded today at {record_time}"
                 }
             else:
                 frame_verifier.reset_student(logged_in_sid)
@@ -1223,16 +1224,41 @@ async def recognize_frame(
         recognized_students = []
         cursor = conn.cursor()
 
+        target_sid = (req.target_student_id or "").strip()
+        if target_sid and target_sid.upper() == "AUTO":
+            target_sid = ""
+
         for i in range(len(faces)):
             face_tensor = faces[i].unsqueeze(0).to(device)
             with torch.no_grad():
                 raw_emb = facenet(face_tensor).cpu().numpy()[0]
             norm_face = normalize_embedding(raw_emb)
 
-            match_res = matcher.match(norm_face, gallery)
+            match_res = matcher.match(norm_face, gallery, target_student_id=target_sid if target_sid else None)
             box = [float(b) for b in boxes[i]] if i < len(boxes) else [0, 0, 0, 0]
             sim_score = match_res.get("similarity_score", 0.0)
             confidence_pct = round(min(99.8, max(0.0, sim_score * 100)), 1)
+
+            if target_sid and match_res.get("status") == "PROXY_MISMATCH":
+                detected_other_id = match_res.get("detected_student_id")
+                detected_other_name = match_res.get("detected_name")
+                detected_faces.append({
+                    "recognized": False,
+                    "mismatch": True,
+                    "verifying": False,
+                    "student_id": target_sid,
+                    "name": match_res.get("name"),
+                    "detected_other_id": detected_other_id,
+                    "detected_other_name": detected_other_name,
+                    "confidence": confidence_pct,
+                    "similarity": sim_score,
+                    "box": box,
+                    "already_marked": False,
+                    "status": f"Face does not match target ({target_sid})",
+                    "message": f"Detected face belongs to '{detected_other_name}' ({detected_other_id}), not target student '{target_sid}'. Attendance not marked.",
+                    "liveness_passed": False
+                })
+                continue
 
             if match_res["recognized"] and match_res.get("student_id"):
                 matched_sid = match_res["student_id"]
@@ -1275,7 +1301,7 @@ async def recognize_frame(
                             conn.commit()
                             create_notification(
                                 student_id=matched_sid,
-                                title="Attendance Successfully Marked ✅",
+                                title="Attendance Successfully Marked",
                                 message=f"Live camera face recognition verified your attendance on {today} at {time_now} (Similarity: {confidence_pct}%).",
                                 notif_type="attendance_success",
                                 severity="success",
@@ -1298,7 +1324,7 @@ async def recognize_frame(
                         "box": box,
                         "already_marked": already_marked,
                         "marked_time": record_time,
-                        "status": "Already Marked Today" if already_marked else "Marked Present ✅",
+                        "status": "Already Marked Today" if already_marked else "Marked Present",
                         "liveness_passed": True
                     }
                     detected_faces.append(face_info)

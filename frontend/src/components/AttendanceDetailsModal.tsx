@@ -70,7 +70,9 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div className="flex items-center gap-2.5">
                         <div className="h-8 w-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold text-sm">
-                            <span>🔍</span>
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                         </div>
                         <div>
                             <h2 className="text-base font-bold text-slate-900 tracking-tight">Verification Details</h2>
@@ -79,9 +81,12 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                     </div>
                     <button
                         onClick={onClose}
-                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer font-bold"
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                        aria-label="Close"
                     >
-                        ✕
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
@@ -90,9 +95,9 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                     <div>
                         <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
                         <div className="flex items-center gap-2 mt-0.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                            <span className="text-base font-black text-emerald-700 tracking-wide">
-                                {isPresent ? "🟢 PRESENT" : "🔴 ABSENT"}
+                            <span className={`h-2.5 w-2.5 rounded-full ${isPresent ? "bg-emerald-500" : "bg-rose-500"}`} />
+                            <span className={`text-base font-black tracking-wide ${isPresent ? "text-emerald-700" : "text-rose-700"}`}>
+                                {isPresent ? "PRESENT" : "ABSENT"}
                             </span>
                         </div>
                     </div>
@@ -112,19 +117,28 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                         <div className="space-y-2 text-xs">
                             <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                                    <span className="text-emerald-600 font-bold">✓</span> Face Recognition
+                                    <svg className="w-3.5 h-3.5 text-emerald-600 font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Face Recognition</span>
                                 </span>
                                 <span className="text-emerald-700 text-[11px] font-mono font-semibold">Matched (FaceNet AI)</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                                    <span className="text-emerald-600 font-bold">✓</span> Liveness Detection
+                                    <svg className="w-3.5 h-3.5 text-emerald-600 font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Liveness Detection</span>
                                 </span>
                                 <span className="text-emerald-700 text-[11px] font-mono font-semibold">Live Sensor OK</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                                    <span className="text-emerald-600 font-bold">✓</span> Verification Type
+                                    <svg className="w-3.5 h-3.5 text-emerald-600 font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Verification Type</span>
                                 </span>
                                 <span className="text-slate-900 text-[11px] font-mono font-semibold">Face + Liveness</span>
                             </div>

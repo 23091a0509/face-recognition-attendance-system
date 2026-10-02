@@ -447,9 +447,12 @@ export default function StudentsPage() {
                             <h3 className="text-base font-bold text-slate-900">Student Profile</h3>
                             <button
                                 onClick={() => setSelectedStudentForProfile(null)}
-                                className="text-slate-400 hover:text-slate-700 font-bold p-1 cursor-pointer"
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                                aria-label="Close"
                             >
-                                ✕
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
                         </div>
 
@@ -486,8 +489,15 @@ export default function StudentsPage() {
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-500">Face Registration:</span>
-                                <span className="text-emerald-700 font-semibold">
-                                    {selectedStudentForProfile.has_face ? "Biometric Enrolled ✓" : "Pending Enrollment"}
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                                    {selectedStudentForProfile.has_face ? (
+                                        <>
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                            <span>Enrolled</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-slate-500">Pending Enrollment</span>
+                                    )}
                                 </span>
                             </div>
                             <div className="flex justify-between">

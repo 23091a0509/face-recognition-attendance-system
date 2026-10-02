@@ -188,7 +188,7 @@ async def register_student(
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! Face matches existing student '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
+                        detail=f"Duplicate Face Detected: Face matches existing student '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
@@ -227,7 +227,7 @@ async def register_student(
         conn.commit()
         conn.close()
 
-        # ✅ Update Recognition Cache with multiple embeddings
+        # Update Recognition Cache with multiple embeddings
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
         cache = []
         if os.path.exists(CACHE_PATH):
@@ -544,7 +544,7 @@ async def update_student_face(
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! This face matches '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
+                        detail=f"Duplicate Face Detected: This face matches '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
@@ -625,7 +625,7 @@ async def update_student_face(
 
 
 # ----------------------------------------------------------------------
-# 📸 Student Profile Picture Management & Storage Bucket Integration
+# Student Profile Picture Management & Storage Bucket Integration
 # ----------------------------------------------------------------------
 class Base64PhotoRequest(BaseModel):
     image: str
@@ -702,7 +702,7 @@ def _process_and_save_profile_picture(student_id: str, raw_bytes: bytes, current
         from backend_api.routers.notifications import create_notification
         create_notification(
             student_id=clean_sid,
-            title="Profile Photo Updated 📸",
+            title="Profile Photo Updated",
             message=f"Your profile picture has been successfully updated.",
             notif_type="profile_update",
             severity="success",
