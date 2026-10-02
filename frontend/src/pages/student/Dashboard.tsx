@@ -116,9 +116,11 @@ export default function StudentDashboard() {
     }, []);
 
     // Derived Attendance Numbers
-    const presentCount = stats?.present ?? (records.length > 0 ? records.length : 0);
-    const totalClasses = Math.max(stats?.total_classes ?? records.length, presentCount > 0 ? presentCount : 1);
-    const absentCount = Math.max(totalClasses - presentCount, 0);
+    const presentRecords = records.filter((r) => (r.status || "").toLowerCase() !== "absent");
+    const absentRecords = records.filter((r) => (r.status || "").toLowerCase() === "absent");
+    const presentCount = stats?.present ?? presentRecords.length;
+    const totalClasses = stats?.total_classes ?? (records.length > 0 ? records.length : (presentCount > 0 ? presentCount : 1));
+    const absentCount = stats?.absent ?? (records.length > 0 ? absentRecords.length : Math.max(0, totalClasses - presentCount));
 
     const attendancePct = totalClasses > 0 
         ? Math.round((presentCount / totalClasses) * 1000) / 10 

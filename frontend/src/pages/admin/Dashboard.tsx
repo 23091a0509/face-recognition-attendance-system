@@ -87,11 +87,24 @@ export default function AdminDashboard() {
         );
     }
 
-    const totalStudents = students.length || 3;
-    const presentCount = todayRecords.length;
-    const lateCount = todayRecords.filter(r => r.status === "Late").length;
-    const onTimeCount = Math.max(0, presentCount - lateCount);
-    const absentCount = Math.max(0, totalStudents - presentCount);
+    const totalStudents = students.length > 0 ? students.length : (todayRecords.length || 0);
+
+    const presentRecords = todayRecords.filter((r) => {
+        const s = (r.status || "").toLowerCase();
+        return s === "present" || s === "full day" || s === "late" || s === "half day";
+    });
+    const lateRecords = todayRecords.filter((r) => (r.status || "").toLowerCase() === "late");
+    const onTimeRecords = todayRecords.filter((r) => {
+        const s = (r.status || "").toLowerCase();
+        return s === "present" || s === "full day";
+    });
+    const absentRecords = todayRecords.filter((r) => (r.status || "").toLowerCase() === "absent");
+
+    const presentCount = presentRecords.length;
+    const lateCount = lateRecords.length;
+    const onTimeCount = onTimeRecords.length;
+    const absentCount = totalStudents > 0 ? Math.max(absentRecords.length, totalStudents - presentCount) : absentRecords.length;
+
     const attendanceRate = totalStudents > 0 ? ((presentCount / totalStudents) * 100).toFixed(1) : "0.0";
     const presentRatePercent = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
     const absentRatePercent = totalStudents > 0 ? Math.round((absentCount / totalStudents) * 100) : 0;
@@ -104,7 +117,7 @@ export default function AdminDashboard() {
         { name: "Absent", value: absentCount, color: "#ef4444" },
     ];
 
-    const lastRecord = todayRecords.length > 0 ? todayRecords[0] : null;
+    const lastRecord = todayRecords.find(r => (r.status || "").toLowerCase() !== "absent" && r.time !== "--:--") || null;
 
     return (
         <div className="space-y-6 animate-fade-in">

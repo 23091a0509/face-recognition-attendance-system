@@ -51,28 +51,103 @@ export default function ReportsPage() {
     }, [students]);
 
     const filteredRecords = useMemo(() => {
+        const days = parseInt(selectedRange, 10);
+        const cutoff = !isNaN(days) ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : null;
+
         return records.filter((r) => {
             const matchesDept = selectedDept === "ALL" || r.department === selectedDept;
             const matchesStudent = selectedStudentId === "ALL" || r.student_id === selectedStudentId;
-            return matchesDept && matchesStudent;
+            let matchesDate = true;
+            if (cutoff && r.date) {
+                const recordDate = new Date(r.date);
+                matchesDate = !isNaN(recordDate.getTime()) ? recordDate >= cutoff : true;
+            }
+            return matchesDept && matchesStudent && matchesDate;
         });
-    }, [records, selectedDept, selectedStudentId]);
+    }, [records, selectedDept, selectedStudentId, selectedRange]);
 
-    // KPI Calculations
-    const totalRecordsCount = filteredRecords.length || 2450;
-    const presentCount = filteredRecords.filter((r) => r.status !== "Absent").length || 2050;
-    const absentCount = Math.max(0, totalRecordsCount - presentCount) || 400;
-    const avgAttendanceRate = totalRecordsCount > 0 ? ((presentCount / totalRecordsCount) * 100).toFixed(1) : "83.7";
+    // KPI Calculations - completely dynamic from actual database records (no fake fallbacks)
+    const totalRecordsCount = filteredRecords.length;
+    const presentCount = filteredRecords.filter((r) => {
+        const s = (r.status || "").toLowerCase();
+        return s === "present" || s === "late" || s === "half day" || s === "full day";
+    }).length;
+    const absentCount = filteredRecords.filter((r) => (r.status || "").toLowerCase() === "absent").length;
+    const avgAttendanceRate = totalRecordsCount > 0 ? ((presentCount / totalRecordsCount) * 100).toFixed(1) : "0.0";
 
-    // Chart trend data
+    // Dynamic Weekly Trend Data
     const trendData = useMemo(() => {
-        return [
-            { day: "Mon", rate: 76.5, present: 98, total: 128 },
-            { day: "Tue", rate: 84.2, present: 108, total: 128 },
-            { day: "Wed", rate: 91.0, present: 116, total: 128 },
-            { day: "Thu", rate: 88.3, present: 113, total: 128 },
-            { day: "Fri", rate: 79.7, present: 102, total: 128 },
-        ];
+        const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const dayMap: Record<string, { present: number; total: number }> = {
+            "Mon": { present: 0, total: 0 },
+            "Tue": { present: 0, total: 0 },
+            "Wed": { present: 0, total: 0 },
+            "Thu": { present: 0, total: 0 },
+            "Fri": { present: 0, total: 0 },
+        };
+
+        filteredRecords.forEach((r) => {
+            if (r.date) {
+                const d = new Date(r.date);
+                const dayName = daysOfWeek[d.getDay()];
+                if (dayMap[dayName]) {
+                    dayMap[dayName].total += 1;
+                    if ((r.status || "").toLowerCase() !== "absent") {
+                        dayMap[dayName].present += 1;
+                    }
+                }
+            }
+        });
+
+        return ["Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => {
+            const data = dayMap[day];
+            const rate = data.total > 0 ? Number(((data.present / data.total) * 100).toFixed(1)) : 100;
+            return {
+                day,
+                rate,
+                present: data.present,
+                total: data.total
+            };
+        });
+    }, [filteredRecords]);
+
+    const peakTrend = useMemo(() => {
+        if (!trendData.length) return "100.0% (Today)";
+        let best = trendData[0];
+        for (const t of trendData) {
+            if (t.total > 0 && t.rate > best.rate) best = t;
+        }
+        return `${best.rate}% (${best.day})`;
+    }, [trendData]);
+
+    const calRecords = useMemo(() => {
+        if (!selectedStudentForCalendar) return [];
+        return records.filter((r) => r.student_id === selectedStudentForCalendar.student_id);
+    }, [selectedStudentForCalendar, records]);
+
+    const calPresent = useMemo(() => {
+        return calRecords.filter((r) => {
+            const s = (r.status || "").toLowerCase();
+            return s === "present" || s === "full day";
+        }).length;
+    }, [calRecords]);
+
+    const calLate = useMemo(() => {
+        return calRecords.filter((r) => (r.status || "").toLowerCase() === "late").length;
+    }, [calRecords]);
+
+    const calAbsent = useMemo(() => {
+        return calRecords.filter((r) => (r.status || "").toLowerCase() === "absent").length;
+    }, [calRecords]);
+
+    const calRate = useMemo(() => {
+        if (calRecords.length === 0) return "100.0";
+        const attended = calPresent + calLate;
+        return ((attended / calRecords.length) * 100).toFixed(1);
+    }, [calRecords, calPresent, calLate]);
+
+    const currentMonthName = useMemo(() => {
+        return new Date().toLocaleString("default", { month: "long", year: "numeric" });
     }, []);
 
     if (loading) {
@@ -199,7 +274,7 @@ export default function ReportsPage() {
                         <p className="text-xs text-slate-500">Weekly Attendance % Distribution</p>
                     </div>
                     <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                        Peak: 91.0% (Wed)
+                        Peak: {peakTrend}
                     </span>
                 </div>
 
@@ -248,7 +323,9 @@ export default function ReportsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {students.map((student) => {
-                        const rate = student.attendance_rate || (student.student_id === "CS001" ? 92.4 : (student.student_id === "CS008" ? 87.0 : 76.0));
+                        const sRecords = records.filter(r => r.student_id === student.student_id);
+                        const sPresent = sRecords.filter(r => (r.status || "").toLowerCase() !== "absent").length;
+                        const rate = sRecords.length > 0 ? Number(((sPresent / sRecords.length) * 100).toFixed(1)) : 100;
                         const isRegistered = student.has_face || student.face_status === "registered";
 
                         return (
@@ -329,19 +406,19 @@ export default function ReportsPage() {
                         <div className="grid grid-cols-4 gap-3 text-center">
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Attendance</span>
-                                <span className="text-lg font-black text-emerald-700 mt-1 block">92.4%</span>
+                                <span className="text-lg font-black text-emerald-700 mt-1 block">{calRate}%</span>
                             </div>
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Present</span>
-                                <span className="text-lg font-bold text-slate-900 mt-1 block">86</span>
+                                <span className="text-lg font-bold text-slate-900 mt-1 block">{calPresent}</span>
                             </div>
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Absent</span>
-                                <span className="text-lg font-bold text-rose-700 mt-1 block">7</span>
+                                <span className="text-lg font-bold text-rose-700 mt-1 block">{calAbsent}</span>
                             </div>
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Late</span>
-                                <span className="text-lg font-bold text-amber-700 mt-1 block">3</span>
+                                <span className="text-lg font-bold text-amber-700 mt-1 block">{calLate}</span>
                             </div>
                         </div>
 
@@ -349,7 +426,7 @@ export default function ReportsPage() {
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                                    September 2026 Attendance Calendar
+                                    {currentMonthName} Attendance Calendar
                                 </h3>
                                 <div className="flex items-center gap-3 text-[11px] text-slate-500">
                                     <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Present</span>

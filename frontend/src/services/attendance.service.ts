@@ -58,6 +58,8 @@ export interface AttendanceStats {
     student_id: string;
     present: number;
     total_classes: number;
+    absent?: number;
+    percentage?: number;
     attendance_percentage: number;
 }
 
