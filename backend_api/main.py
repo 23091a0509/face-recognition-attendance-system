@@ -31,11 +31,16 @@ async def lifespan(app: FastAPI):
         create_tables()
         logger.info("Database tables initialized and seeded successfully.")
 
-        # Ensure IP restriction is disabled by default so internet attendance is never blocked
-        from backend.database import set_system_config
-        if os.getenv("ENFORCE_CAMPUS_IP", "").lower() not in ("true", "1"):
-            set_system_config("ip_restriction_enabled", "false")
-            logger.info("Campus IP geofencing initialized to DISABLED (Open Access).")
+        # Respect admin-configured IP restriction; only override if explicitly requested via environment variable
+        from backend.database import get_system_config, set_system_config
+        env_enforce = os.getenv("ENFORCE_CAMPUS_IP")
+        if env_enforce is not None:
+            val = "true" if env_enforce.lower() in ("true", "1") else "false"
+            set_system_config("ip_restriction_enabled", val)
+            logger.info("Campus IP geofencing forced by ENFORCE_CAMPUS_IP env var to: %s", val)
+        else:
+            current_setting = get_system_config("ip_restriction_enabled", "false")
+            logger.info("Campus IP geofencing status from database: %s", current_setting)
     except Exception as e:
         logger.error("Database initialization failed: %s", e)
         logger.warning("Continuing application startup so health check/diagnostics are reachable.")

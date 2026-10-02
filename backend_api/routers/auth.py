@@ -59,6 +59,12 @@ def create_token(student_id: str):
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
+
+def decode_token(token: str) -> dict:
+    """Decode and validate a JWT access token, returning the payload dictionary."""
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
 @router.post("/login")
 async def login(request: Request):
     student_id = None
