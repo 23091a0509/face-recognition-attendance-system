@@ -30,6 +30,12 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing SQLite database tables...")
         create_tables()
         logger.info("Database tables initialized and seeded successfully.")
+
+        # Ensure IP restriction is disabled by default so internet attendance is never blocked
+        from backend.database import set_system_config
+        if os.getenv("ENFORCE_CAMPUS_IP", "").lower() not in ("true", "1"):
+            set_system_config("ip_restriction_enabled", "false")
+            logger.info("Campus IP geofencing initialized to DISABLED (Open Access).")
     except Exception as e:
         logger.error("Database initialization failed: %s", e)
         logger.warning("Continuing application startup so health check/diagnostics are reachable.")
@@ -44,24 +50,15 @@ PROFILES_DIR = os.path.join(UPLOADS_DIR, "profiles")
 os.makedirs(PROFILES_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-# Hardened CORS Configuration
-if ENV == "production":
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|.*\.trycloudflare\.com|.*\.vercel\.app)(:\d+)?$",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Hardened CORS Configuration (Permits all Render cloud subdomains)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(.*\.onrender\.com|localhost|127\.0\.0\.1|.*\.trycloudflare\.com|.*\.vercel\.app)(:\d+)?$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth_router)
 app.include_router(students_router)

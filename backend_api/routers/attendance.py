@@ -321,7 +321,7 @@ def get_attendance_history(admin_user: dict = Depends(require_admin)):
 # ----------------------------
 @router.get("/student/{student_id}/records")
 def student_attendance_records(student_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "admin" and current_user.get("student_id") != student_id:
+    if current_user.get("role") != "admin" and (current_user.get("student_id") or "").strip().upper() != student_id.strip().upper():
         raise HTTPException(status_code=403, detail="Forbidden: You can only access your own records")
 
     conn = get_connection()
@@ -617,7 +617,7 @@ def session_heartbeat(
 # ----------------------------
 @router.get("/student/{student_id}")
 def student_attendance(student_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "admin" and current_user.get("student_id") != student_id:
+    if current_user.get("role") != "admin" and (current_user.get("student_id") or "").strip().upper() != student_id.strip().upper():
         raise HTTPException(status_code=403, detail="Forbidden: You can only access your own stats")
 
     conn = get_connection()
@@ -657,7 +657,7 @@ class AttendanceMarkRequest(BaseModel):
 # ----------------------------
 @router.get("/student/{student_id}/today")
 def check_student_today(student_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "admin" and current_user.get("student_id") != student_id:
+    if current_user.get("role") != "admin" and (current_user.get("student_id") or "").strip().upper() != student_id.strip().upper():
         raise HTTPException(status_code=403, detail="Forbidden")
 
     today = get_today_date_str()

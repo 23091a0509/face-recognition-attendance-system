@@ -332,6 +332,61 @@ def get_all_students(admin_user: dict = Depends(require_admin)):
 
     return result
 
+
+@router.get("/{student_id}")
+def get_student_profile(student_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Retrieves full profile for an individual student.
+    Accessible by Administrators or the authenticated Student themselves.
+    """
+    user_role = current_user.get("role")
+    logged_in_sid = current_user.get("student_id") or ""
+
+    if user_role != "admin" and logged_in_sid.strip().upper() != student_id.strip().upper():
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: You can only view your own student profile"
+        )
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT student_id, name, department, photo_url, year, email,
+               (embedding IS NOT NULL AND length(embedding) > 0) AS has_face
+        FROM students
+        WHERE student_id = ?
+    """, (student_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Student '{student_id}' not found")
+
+    cursor.execute("SELECT COUNT(DISTINCT date) FROM attendance")
+    total_dates_row = cursor.fetchone()
+    total_dates = total_dates_row[0] if total_dates_row else 0
+
+    cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id = ?", (student_id,))
+    att_row = cursor.fetchone()
+    present_count = att_row[0] if att_row else 0
+    conn.close()
+
+    rate = round((present_count / total_dates * 100), 1) if total_dates > 0 else 0.0
+
+    return {
+        "student_id": row[0],
+        "name": row[1],
+        "department": row[2] or "General",
+        "photo_url": row[3],
+        "year": row[4],
+        "email": row[5] or f"{row[0].lower()}@institution.edu",
+        "has_face": bool(row[6]),
+        "face_status": "registered" if bool(row[6]) else "not_registered",
+        "total_present": present_count,
+        "attendance_rate": rate
+    }
+
+
 @router.delete("/{student_id}")
 def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
     if student_id == "admin":

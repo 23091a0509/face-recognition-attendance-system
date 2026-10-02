@@ -23,10 +23,15 @@ def _clean_ip_string(ip_str: str) -> str:
 def get_client_ip(request: Request) -> str:
     """
     Extracts the client's public/LAN IP address inspecting proxy headers first:
-    1. X-Forwarded-For (first entry)
-    2. X-Real-IP
-    3. request.client.host
+    1. CF-Connecting-IP (Cloudflare on Render)
+    2. X-Forwarded-For (first entry)
+    3. X-Real-IP
+    4. request.client.host
     """
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip and cf_ip.strip():
+        return _clean_ip_string(cf_ip.strip())
+
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         first_ip = forwarded.split(",")[0].strip()
@@ -48,7 +53,7 @@ def is_ip_allowed(client_ip: str, allowed_ips_str: str) -> bool:
     Checks if client_ip is contained in the allowed list of IPs or CIDR subnets.
     Supports IPv4, IPv6, and IPv4-mapped IPv6 addresses, safely skipping version mismatches.
     """
-    if not allowed_ips_str or not allowed_ips_str.strip():
+    if not allowed_ips_str or not allowed_ips_str.strip() or allowed_ips_str.strip() in ("*", "0.0.0.0/0", "all"):
         return True
 
     clean_client = _clean_ip_string(client_ip)
@@ -91,6 +96,7 @@ def verify_campus_ip(request: Request):
     """
     FastAPI dependency that enforces network geofencing on attendance endpoints.
     If ip_restriction_enabled is true and caller IP is not whitelisted, raises 403.
+    Admins are always exempt from IP restriction.
     """
     is_enabled_raw = get_system_config("ip_restriction_enabled", "false")
     is_enabled = str(is_enabled_raw).strip().lower() in ("true", "1", "yes", "on")
@@ -98,7 +104,21 @@ def verify_campus_ip(request: Request):
     if not is_enabled:
         return
 
+    # 1. Exempt Administrators from network geofencing
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            from backend_api.routers.auth import decode_token
+            payload = decode_token(auth_header.split(" ")[1])
+            if payload.get("role") == "admin":
+                return
+        except Exception:
+            pass
+
     allowed_ips = get_system_config("allowed_ips", "")
+    if not allowed_ips or allowed_ips.strip() in ("", "*", "0.0.0.0/0", "all"):
+        return
+
     client_ip = get_client_ip(request)
 
     if not is_ip_allowed(client_ip, allowed_ips):

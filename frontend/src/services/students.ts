@@ -18,6 +18,11 @@ export async function getAllStudents(): Promise<Student[]> {
     return response.data;
 }
 
+export async function getStudentById(studentId: string): Promise<Student> {
+    const response = await api.get(`/students/${studentId}`);
+    return response.data;
+}
+
 export async function registerStudent(formData: FormData) {
     const res = await api.post("/students/register", formData, {
         headers: {

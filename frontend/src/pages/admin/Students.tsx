@@ -16,14 +16,22 @@ export default function StudentsPage() {
     const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<Student | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    const [retrying, setRetrying] = useState(false);
+
     async function load() {
         try {
+            setLoading(true);
+            setError("");
             const data = await getAllStudents();
-            setStudents(data);
-        } catch {
-            setError("Failed to load students");
+            setStudents(Array.isArray(data) ? data : []);
+            setError("");
+        } catch (err: any) {
+            console.error("Failed to load students:", err);
+            const msg = err.response?.data?.detail || "Failed to load students. Server may be starting up.";
+            setError(msg);
         } finally {
             setLoading(false);
+            setRetrying(false);
         }
     }
 
@@ -107,8 +115,23 @@ export default function StudentsPage() {
 
     if (error) {
         return (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium">
-                {error}
+            <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 space-y-3 max-w-lg mx-auto my-12 text-center shadow-sm animate-fade-in">
+                <div className="w-12 h-12 rounded-full bg-rose-100 border border-rose-200 flex items-center justify-center mx-auto text-rose-600">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 className="text-base font-bold text-slate-900">Could Not Load Students</h3>
+                <p className="text-xs text-slate-600">{error}</p>
+                <div className="pt-2">
+                    <button
+                        onClick={() => { setRetrying(true); load(); }}
+                        disabled={retrying}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                        {retrying ? "Connecting to server..." : "Retry Connection"}
+                    </button>
+                </div>
             </div>
         );
     }
