@@ -650,7 +650,14 @@ export default function WebcamPage() {
                         autoPlay
                         playsInline
                         muted
-                        className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                        onLoadedMetadata={(e) => {
+                            (e.target as HTMLVideoElement).play().catch(console.warn);
+                        }}
+                        onPlaying={() => {
+                            setCameraActive(true);
+                            setCameraError("");
+                        }}
+                        className={`w-full h-full object-cover transition-opacity duration-200 ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"}`}
                     />
 
                     {cameraActive && (

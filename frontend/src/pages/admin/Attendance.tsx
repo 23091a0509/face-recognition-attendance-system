@@ -645,8 +645,8 @@ export default function AttendancePage() {
             </div>
 
             {/* Modal for creating a new session */}
-            {showNewSessionModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
+            {showNewSessionModal && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
                     <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                             <h3 className="text-base font-bold text-slate-900">Create Attendance Session</h3>
@@ -716,7 +716,8 @@ export default function AttendancePage() {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Header Metric Banner */}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { getAttendanceHistory, type AttendanceRecord } from "../../services/attendance.service";
 import { getAllStudents, type Student } from "../../services/students";
 import { exportAttendanceCsv } from "../../utils/exportCsv";
@@ -297,8 +298,8 @@ export default function ReportsPage() {
             </div>
 
             {/* STUDENT ATTENDANCE CALENDAR MODAL */}
-            {selectedStudentForCalendar && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
+            {selectedStudentForCalendar && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
                     <div className="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-4 sm:p-6 space-y-5 my-auto max-h-[90vh] overflow-y-auto">
                         {/* Header */}
                         <div className="flex items-center justify-between pb-4 border-b border-slate-200">
@@ -433,7 +434,8 @@ export default function ReportsPage() {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
