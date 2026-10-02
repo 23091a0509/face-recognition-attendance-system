@@ -35,6 +35,10 @@ def _get_device():
     global _device
     if _device is None:
         import torch
+        try:
+            torch.set_num_threads(1)
+        except Exception:
+            pass
         _device = "cuda" if torch.cuda.is_available() else "cpu"
     return _device
 
@@ -263,7 +267,7 @@ async def register_student(
     except (ImportError, ModuleNotFoundError) as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Biometric ML runtime dependencies are not installed in this environment ({e}). Please install full requirements.txt on the edge/kiosk node."
+            detail="Biometric ML engine is initializing or unavailable. Please retry in a moment."
         )
     except sqlite3.IntegrityError as e:
         raise HTTPException(
@@ -617,7 +621,7 @@ async def update_student_face(
     except (ImportError, ModuleNotFoundError) as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Biometric ML runtime dependencies are not installed in this environment ({e}). Please install full requirements.txt on the edge/kiosk node."
+            detail="Biometric ML engine is initializing or unavailable. Please retry in a moment."
         )
     except Exception as e:
         logger.error("[UPDATE-FACE] Error: %s", e)

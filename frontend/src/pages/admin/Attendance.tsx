@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
     getTodayAttendance,
     markAttendance,
@@ -61,6 +62,8 @@ export default function AttendancePage() {
         confidence: number;
         status: string;
         timestamp: string;
+        isVerified: boolean;
+        isMismatch?: boolean;
     } | null>(null);
 
     // Group Mode Multi-Face Detections & Session Log
@@ -339,12 +342,14 @@ export default function AttendancePage() {
                     if (scannerMode === "SOLO") {
                         if (result.mismatch) {
                             setDetectedStudent({
-                                studentId: result.student_id || selectedStudentToRecognize,
-                                name: result.name || "Target Student",
+                                studentId: "",
+                                name: "Face Mismatch Blocked",
                                 department: "Target Verification",
                                 confidence: result.confidence || 0,
-                                status: result.message || `Face does not match target (${selectedStudentToRecognize})`,
-                                timestamp: timeStr
+                                status: result.message || `Face does NOT match target (${selectedStudentToRecognize})`,
+                                timestamp: timeStr,
+                                isVerified: false,
+                                isMismatch: true
                             });
                         } else if (result.recognized && result.student_id) {
                             const targetStudent = students.find((s) => s.student_id === selectedStudentToRecognize);
@@ -357,7 +362,9 @@ export default function AttendancePage() {
                                     department: result.department || "Computer Science",
                                     confidence: result.confidence || 96.5,
                                     status: result.already_marked ? "Already Marked Today" : "Marked Present",
-                                    timestamp: timeStr
+                                    timestamp: timeStr,
+                                    isVerified: true,
+                                    isMismatch: false
                                 });
 
                                 if (lastRecognizedStudent.current !== result.student_id) {
@@ -367,12 +374,14 @@ export default function AttendancePage() {
                                 }
                             } else {
                                 setDetectedStudent({
-                                    studentId: result.student_id,
-                                    name: result.name || result.student_id,
-                                    department: result.department || "Computer Science",
+                                    studentId: "",
+                                    name: "Target Mismatch Blocked",
+                                    department: "Target Verification",
                                     confidence: result.confidence || 96.5,
-                                    status: `Face does not match target (${targetStudent?.name || selectedStudentToRecognize})`,
-                                    timestamp: timeStr
+                                    status: `Detected face (${result.name || result.student_id}) does NOT match target (${targetStudent?.name || selectedStudentToRecognize})`,
+                                    timestamp: timeStr,
+                                    isVerified: false,
+                                    isMismatch: true
                                 });
                             }
                         } else if (result.face_detected) {
@@ -382,8 +391,12 @@ export default function AttendancePage() {
                                 department: "Unknown",
                                 confidence: result.confidence || 0,
                                 status: "Face detected, identifying...",
-                                timestamp: timeStr
+                                timestamp: timeStr,
+                                isVerified: false,
+                                isMismatch: false
                             });
+                        } else {
+                            setDetectedStudent(null);
                         }
                     }
 
@@ -450,7 +463,10 @@ export default function AttendancePage() {
 
     // Confirm and record attendance for student actually recognized by camera
     async function handleConfirmRecognized() {
-        if (!detectedStudent || !detectedStudent.studentId) return;
+        if (!detectedStudent || !detectedStudent.studentId || !detectedStudent.isVerified) {
+            showNotification("Cannot mark attendance: Face identity is not verified by camera.");
+            return;
+        }
         try {
             await markAttendance(detectedStudent.studentId);
             showNotification(`Attendance confirmed for ${detectedStudent.name}`);
@@ -1460,8 +1476,8 @@ export default function AttendancePage() {
             )}
 
             {/* DEDICATED CAMERA ATTENDANCE MODAL */}
-            {showScannerModal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fade-in">
+            {showScannerModal && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fade-in">
                     <div className={`w-full ${isFullscreen ? "fixed inset-0 max-w-none h-screen rounded-none z-[60] overflow-y-auto m-0 p-4" : "max-w-2xl rounded-2xl"} bg-white border border-slate-200 shadow-2xl overflow-hidden space-y-4 my-auto transition-all`}>
                         {/* Modal Header */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 gap-3">
@@ -1549,18 +1565,25 @@ export default function AttendancePage() {
                         <div className="p-4 sm:p-6 space-y-4">
                             <div className="relative rounded-2xl border-2 border-slate-300 bg-black overflow-hidden flex flex-col items-center justify-center min-h-[260px] sm:min-h-[320px] shadow-lg">
                                 <div className="relative w-full h-64 sm:h-80 overflow-hidden flex items-center justify-center">
-                                    {/* Video element is ALWAYS mounted in DOM to guarantee videoRef is ready on first mount */}
+                                    {/* Video element is ALWAYS mounted with real geometry so frames decode on first open */}
                                     <video
                                         ref={videoRef}
                                         autoPlay
                                         playsInline
                                         muted
-                                        className={`w-full h-full object-cover ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                                        onLoadedMetadata={(e) => {
+                                            (e.target as HTMLVideoElement).play().catch(console.warn);
+                                        }}
+                                        onPlaying={() => {
+                                            setCameraActive(true);
+                                            setCameraError("");
+                                        }}
+                                        className={`w-full h-full object-cover transition-opacity duration-200 ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"}`}
                                     />
 
                                     <canvas
                                         ref={overlayCanvasRef}
-                                        className={`absolute inset-0 w-full h-full object-cover pointer-events-none ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "block" : "hidden"}`}
+                                        className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-200 ${facingMode === "user" ? "mirror" : ""} ${cameraActive ? "opacity-100" : "opacity-0 pointer-events-none"}`}
                                     />
 
                                     {cameraActive && scannerMode === "SOLO" && (
@@ -1755,7 +1778,11 @@ export default function AttendancePage() {
                                             </label>
                                             <select
                                                 value={selectedStudentToRecognize}
-                                                onChange={(e) => setSelectedStudentToRecognize(e.target.value)}
+                                                onChange={(e) => {
+                                                    setSelectedStudentToRecognize(e.target.value);
+                                                    setDetectedStudent(null);
+                                                    lastRecognizedStudent.current = null;
+                                                }}
                                                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 font-medium cursor-pointer"
                                             >
                                                 <option value="AUTO">Auto-Detect Any Registered Student (1:N)</option>
@@ -1773,16 +1800,24 @@ export default function AttendancePage() {
                                             <button
                                                 type="button"
                                                 onClick={handleConfirmRecognized}
-                                                disabled={!detectedStudent || !detectedStudent.studentId}
-                                                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs transition-all shadow-xs cursor-pointer whitespace-nowrap text-center flex items-center justify-center gap-1.5"
+                                                disabled={!detectedStudent || !detectedStudent.studentId || !detectedStudent.isVerified}
+                                                className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs transition-all shadow-xs cursor-pointer whitespace-nowrap text-center flex items-center justify-center gap-1.5 ${
+                                                    detectedStudent?.isVerified && detectedStudent?.studentId
+                                                        ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                                                        : detectedStudent?.isMismatch
+                                                        ? "bg-rose-600/80 cursor-not-allowed opacity-80"
+                                                        : "bg-slate-300 cursor-not-allowed opacity-60"
+                                                }`}
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                 </svg>
                                                 <span>
-                                                    {detectedStudent && detectedStudent.studentId
+                                                    {detectedStudent?.isVerified && detectedStudent?.studentId
                                                         ? `Mark Present: ${detectedStudent.name}`
-                                                        : "Waiting for Camera Face..."}
+                                                        : detectedStudent?.isMismatch
+                                                        ? "Face Mismatch Blocked"
+                                                        : "Waiting for Verified Face..."}
                                                 </span>
                                             </button>
                                         </div>
@@ -1796,7 +1831,8 @@ export default function AttendancePage() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

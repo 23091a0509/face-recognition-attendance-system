@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+
 export interface AttendanceDetailData {
     student_id: string;
     name?: string;
@@ -60,8 +62,8 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
     const confidenceScore = record.confidence || 97;
     const isPresent = record.status !== "Absent";
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
             <div
                 className="relative w-full max-w-md rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl space-y-5 text-slate-800 animate-scale-up"
                 onClick={(e) => e.stopPropagation()}
@@ -182,6 +184,7 @@ export default function AttendanceDetailsModal({ record, onClose }: Props) {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

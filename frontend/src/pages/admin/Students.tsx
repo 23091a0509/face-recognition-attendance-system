@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import type { Student } from "../../services/students";
 import { getAllStudents, deleteStudent } from "../../services/students";
 import { resolveImageUrl } from "../../services/api";
@@ -440,8 +441,8 @@ export default function StudentsPage() {
             )}
 
             {/* Student Profile Quick View Modal */}
-            {selectedStudentForProfile && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
+            {selectedStudentForProfile && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
                     <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                             <h3 className="text-base font-bold text-slate-900">Student Profile</h3>
@@ -524,7 +525,8 @@ export default function StudentsPage() {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

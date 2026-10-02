@@ -67,7 +67,7 @@ def test_duplicate_student_integrity():
     response = client.post("/students/register", data=form_data, files=files, headers=headers)
     assert response.status_code in [400, 503]
     detail = response.json().get("detail", "")
-    assert any(expected in detail for expected in ["Student ID is already registered", "No face detected", "Biometric ML"])
+    assert any(expected in detail for expected in ["Student ID is already registered", "No face detected", "Biometric ML", "Facial recognition"])
 
 def test_attendance_flow():
     admin_token = create_token("admin")

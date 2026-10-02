@@ -5,7 +5,7 @@ services:
     name: face-attendance-backend
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements-backend.txt
+    buildCommand: pip install -r requirements-backend.txt && python -c "from facenet_pytorch import MTCNN, InceptionResnetV1; MTCNN(device='cpu'); InceptionResnetV1(pretrained='vggface2').eval()"
     startCommand: uvicorn backend_api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
