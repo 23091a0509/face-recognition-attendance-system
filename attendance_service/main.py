@@ -303,7 +303,7 @@ def main():
                             blink_detector.reset()
                             label += " | Marking Present..."
                 else:
-                    label += " | Blink to Confirm 👁️"
+                    label += " | Blink to Confirm"
 
             # Render Bounding Box and Telemetry
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
