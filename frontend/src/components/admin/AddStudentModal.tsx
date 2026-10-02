@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { registerStudent } from "../../services/students";
 
 interface Props {
@@ -46,30 +47,76 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
         };
     }, [facingMode, capturedImage]);
 
-    function startCamera() {
-        stopCamera();
+    // Synchronize video element srcObject when camera becomes active
+    useEffect(() => {
+        if (cameraActive && videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(console.warn);
+        }
+    }, [cameraActive]);
 
-        navigator.mediaDevices?.getUserMedia({
-            video: {
-                facingMode: facingMode,
-                width: { ideal: 1280, min: 640 },
-                height: { ideal: 720, min: 480 },
-            },
-            audio: false,
-        })
-            .then((stream) => {
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-                setCameraActive(true);
-                setCameraError("");
-            })
-            .catch((err) => {
-                console.warn("Camera access error:", err);
-                setCameraError("Camera unavailable. Please verify browser camera permissions.");
-                setCameraActive(false);
+    async function startCamera() {
+        stopCamera();
+        setCameraError("");
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const isSecure = window.isSecureContext !== false;
+            setCameraError(
+                !isSecure
+                    ? "Camera access requires HTTPS or localhost."
+                    : "Camera capture is not supported by your current browser."
+            );
+            return;
+        }
+
+        let stream: MediaStream | null = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280, min: 640 },
+                    height: { ideal: 720, min: 480 },
+                },
+                audio: false,
             });
+        } catch (err: any) {
+            console.warn("Primary constraints failed, falling back...", err);
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false,
+                });
+            } catch (fallbackErr: any) {
+                console.error("Camera access error:", fallbackErr);
+                const name = fallbackErr.name || "";
+                if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+                    setCameraError("Camera permission denied. Please allow camera permissions in your browser.");
+                } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+                    setCameraError("No webcam found on this device.");
+                } else if (name === "NotReadableError" || name === "TrackStartError") {
+                    setCameraError("Camera is currently in use by another app.");
+                } else {
+                    setCameraError(fallbackErr.message || "Camera unavailable.");
+                }
+                setCameraActive(false);
+                return;
+            }
+        }
+
+        if (!stream) return;
+        streamRef.current = stream;
+
+        const video = videoRef.current;
+        if (video) {
+            video.srcObject = stream;
+            try {
+                await video.play();
+            } catch (playErr) {
+                console.warn("Video play error:", playErr);
+            }
+        }
+        setCameraActive(true);
+        setCameraError("");
     }
 
     function stopCamera() {
@@ -160,40 +207,45 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
         }
     }
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-fade-in">
-            <div className="w-full max-w-2xl rounded-2xl bg-[#0b1120] border border-slate-800 shadow-2xl overflow-hidden my-auto max-h-[95vh] flex flex-col">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
+            <div className="w-full max-w-2xl rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[88vh] sm:max-h-[92vh] flex flex-col min-h-0 text-slate-800">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-900/60 flex-shrink-0">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold text-lg">
-                            👤
+                        <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
                         </div>
                         <div>
-                            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Add New Student</h2>
-                            <p className="text-xs text-slate-400">Live facial biometric registration (1 Perfect Capture)</p>
+                            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Add New Student</h2>
+                            <p className="text-xs text-slate-500">Live facial biometric registration (1 Perfect Capture)</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                        aria-label="Close"
                     >
-                        ✕
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+                <form id="add-student-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 min-h-0 bg-white">
                     {/* Section 1: Student Information */}
                     <div className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                             1. Student Information
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Student ID *</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Student ID *</label>
                                 <input
                                     required
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium font-mono"
                                     placeholder="e.g. CS009"
                                     value={studentId}
                                     onChange={(e) => handleStudentIdChange(e.target.value)}
@@ -201,10 +253,10 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name *</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
                                 <input
                                     required
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                                     placeholder="e.g. Rahul Sharma"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
@@ -212,11 +264,11 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Department</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Department</label>
                                 <select
                                     value={department}
                                     onChange={(e) => setDepartment(e.target.value)}
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                                 >
                                     <option value="Computer Science">Computer Science</option>
                                     <option value="Information Technology">Information Technology</option>
@@ -227,11 +279,11 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Year</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Year</label>
                                 <select
                                     value={year}
                                     onChange={(e) => setYear(e.target.value)}
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                                 >
                                     <option value="1st Year">1st Year</option>
                                     <option value="2nd Year">2nd Year</option>
@@ -241,10 +293,10 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
                                 <input
                                     type="email"
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                                     placeholder="rahul@institution.edu"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
@@ -252,10 +304,10 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">Portal Password</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Portal Password</label>
                                 <input
                                     type="password"
-                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors font-medium"
                                     placeholder="Default: password123"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -264,82 +316,125 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                         </div>
                     </div>
 
-                    <div className="border-t border-slate-800/80" />
+                    <div className="border-t border-slate-200" />
 
                     {/* Section 2: Single Perfect Face Capture */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                 2. Face Biometric Capture
                             </h3>
-                            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                📸 1 Perfect Photo
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span>1 Face Photo</span>
                             </span>
                         </div>
 
                         {/* Live Camera Feed or Captured Photo Preview */}
-                        <div className="relative rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden flex flex-col items-center justify-center p-4 min-h-[240px]">
+                        <div className="relative rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden flex flex-col items-center justify-center p-4 min-h-[240px]">
                             {previewUrl ? (
                                 /* Photo Captured State */
                                 <div className="flex flex-col items-center gap-3 w-full py-2">
-                                    <div className="relative rounded-xl overflow-hidden border-2 border-emerald-500 shadow-xl shadow-emerald-500/20 max-w-xs">
+                                    <div className="relative rounded-xl overflow-hidden border-2 border-blue-600 shadow-xl shadow-blue-500/10 max-w-xs">
                                         <img
                                             src={previewUrl}
                                             alt="Captured student face"
                                             className="w-full h-48 object-cover"
                                         />
-                                        <div className="absolute top-2 right-2 bg-emerald-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-                                            ✓ Captured
+                                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow inline-flex items-center gap-1">
+                                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span>Captured</span>
                                         </div>
                                     </div>
 
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
-                                            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        <span className="text-xs text-blue-700 font-semibold flex items-center gap-1.5">
+                                            <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse"></span>
                                             Face ready for AI recognition embedding
                                         </span>
                                         <button
                                             type="button"
                                             onClick={retakePhoto}
-                                            className="ml-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                                            className="ml-2 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1"
                                         >
-                                            🔄 Retake
+                                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <span>Retake</span>
                                         </button>
                                     </div>
                                 </div>
                             ) : (
                                 /* Live Camera State */
                                 <>
-                                    {cameraActive ? (
-                                        <div className="relative w-full max-w-xs rounded-xl overflow-hidden border border-slate-700 shadow-lg">
-                                            <video
-                                                ref={videoRef}
-                                                autoPlay
-                                                playsInline
-                                                muted
-                                                className={`w-full h-48 object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
-                                            />
-                                            {/* Biometric Framing Guide */}
-                                            <div className="absolute inset-0 border-2 border-emerald-400/50 rounded-full m-4 pointer-events-none" />
-                                            <div className="absolute bottom-2 inset-x-0 text-center">
-                                                <span className="text-[10px] font-semibold bg-black/70 text-emerald-300 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                                                    Position face inside oval
-                                                </span>
+                                    <div className="relative w-full max-w-xs rounded-xl overflow-hidden border border-slate-300 shadow-md bg-black flex items-center justify-center min-h-[192px]">
+                                        {/* Video is ALWAYS mounted with real geometry to initialize frames immediately */}
+                                        <video
+                                            ref={videoRef}
+                                            autoPlay
+                                            playsInline
+                                            muted
+                                            onLoadedMetadata={(e) => {
+                                                (e.target as HTMLVideoElement).play().catch(console.warn);
+                                            }}
+                                            onPlaying={() => {
+                                                setCameraActive(true);
+                                                setCameraError("");
+                                            }}
+                                            className={`w-full h-48 object-cover transition-opacity duration-200 ${facingMode === "user" ? "scale-x-[-1]" : ""} ${cameraActive ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"}`}
+                                        />
+
+                                        {cameraActive && (
+                                            <>
+                                                {/* Biometric Framing Guide */}
+                                                <div className="absolute inset-0 border-2 border-blue-400/60 rounded-full m-4 pointer-events-none" />
+                                                <div className="absolute bottom-2 inset-x-0 text-center pointer-events-none">
+                                                    <span className="text-[10px] font-semibold bg-black/70 text-blue-200 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                                                        Position face inside oval
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {!cameraActive && (
+                                            <div className="text-center p-6 text-slate-400 space-y-2">
+                                                {cameraError ? (
+                                                    <>
+                                                        <div className="w-8 h-8 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-xs font-semibold text-rose-300 max-w-xs">{cameraError}</p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={startCamera}
+                                                            className="mt-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                                        >
+                                                            Retry Camera
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-1"></div>
+                                                        <p className="text-xs text-slate-300 font-medium">Starting camera...</p>
+                                                    </>
+                                                )}
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center p-6 text-slate-400">
-                                            <div className="h-10 w-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                            <p className="text-xs font-medium">{cameraError || "Initializing camera..."}</p>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
 
                                     <div className="mt-3 flex items-center gap-2">
                                         <button
                                             type="button"
                                             onClick={captureFace}
                                             disabled={!cameraActive}
-                                            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-2"
+                                            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-md shadow-blue-600/20 cursor-pointer flex items-center gap-2"
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -351,10 +446,13 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
                                         <button
                                             type="button"
                                             onClick={toggleFacingMode}
-                                            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs cursor-pointer transition-colors"
+                                            className="p-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5"
                                             title="Switch Camera (Front/Back)"
                                         >
-                                            🔄 {facingMode === "user" ? "Front" : "Back"}
+                                            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <span>{facingMode === "user" ? "Front" : "Back"}</span>
                                         </button>
                                     </div>
                                 </>
@@ -364,42 +462,46 @@ export default function AddStudentModal({ onClose, onSuccess }: Props) {
 
                     {/* Biometric Validation / Duplicate Face Alert Box */}
                     {formError && (
-                        <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in shadow-lg">
-                            <span className="text-lg leading-none">⚠️</span>
+                        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2.5 animate-fade-in shadow-sm">
+                            <svg className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
                             <div className="space-y-0.5">
-                                <span className="font-bold block text-rose-200">Biometric Registration Alert</span>
-                                <span className="text-slate-200 text-xs leading-relaxed block">{formError}</span>
+                                <span className="font-bold block text-rose-900">Registration Alert</span>
+                                <span className="text-rose-700 text-xs leading-relaxed block">{formError}</span>
                             </div>
                         </div>
                     )}
-
-                    {/* Footer Actions */}
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors"
-                        >
-                            Cancel
-                        </button>
-
-                        <button
-                            type="submit"
-                            disabled={loading || !capturedImage || !studentId || !name}
-                            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black text-xs font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
-                        >
-                            {loading ? (
-                                <>
-                                    <div className="h-3.5 w-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Registering Biometrics...</span>
-                                </>
-                            ) : (
-                                <span>Save & Register Student</span>
-                            )}
-                        </button>
-                    </div>
                 </form>
+
+                {/* Sticky Pinned Modal Footer Actions (Always Accessible) */}
+                <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        form="add-student-form"
+                        disabled={loading || !capturedImage || !studentId || !name}
+                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-2 cursor-pointer"
+                    >
+                        {loading ? (
+                            <>
+                                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>Registering Biometrics...</span>
+                            </>
+                        ) : (
+                            <span>Save & Register Student</span>
+                        )}
+                    </button>
+                </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

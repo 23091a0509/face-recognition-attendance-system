@@ -141,11 +141,11 @@ class LivenessStateMachine:
             LivenessState.IDLE: "Looking for face...",
             LivenessState.FACE_DETECTED: "Face detected. Assessing quality...",
             LivenessState.QUALITY_CHECK: "Quality verified.",
-            LivenessState.BLINK_REQUIRED: "Please blink your eyes naturally 👁️",
+            LivenessState.BLINK_REQUIRED: "Please blink your eyes naturally",
             LivenessState.BLINK_CONFIRMED: "Blink verified! Confirming identity...",
             LivenessState.IDENTITY_VERIFICATION: "Verifying student identity...",
             LivenessState.TEMPORAL_CONFIRMATION: "Maintaining stability...",
-            LivenessState.ATTENDANCE_MARKED: "Attendance Verified & Marked ✅"
+            LivenessState.ATTENDANCE_MARKED: "Attendance Verified & Marked"
         }
 
         return {

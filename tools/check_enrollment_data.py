@@ -110,7 +110,7 @@ def audit_enrollments():
                 issues.append(f"[COLLISION RISK] '{name1}' ({sid1}) and '{name2}' ({sid2}) have high similarity: {sim:.4f} (Possible duplicate enrollment!)")
 
     if not collision_found:
-        print("  ✅ All student identity centroids are mutually distinct (< 0.70 cross-similarity).")
+        print("  [PASS] All student identity centroids are mutually distinct (< 0.70 cross-similarity).")
 
     print("-" * 70)
     if issues:
@@ -118,7 +118,7 @@ def audit_enrollments():
         for idx, item in enumerate(issues, 1):
             print(f"  {idx}. {item}")
     else:
-        print("✅ ALL ENROLLMENT DATA PASSED INTEGRITY AUDIT! No corruptions or collisions.")
+        print("[SUCCESS] ALL ENROLLMENT DATA PASSED INTEGRITY AUDIT! No corruptions or collisions.")
     print("=" * 70)
 
     conn.close()

@@ -1,9 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from pydantic import BaseModel
+from typing import Optional
 import pickle
 from backend.database import get_connection
 import sqlite3
 import os
+import logging
 from .auth import require_admin, get_current_user
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CACHE_PATH = os.path.join(ROOT_DIR, "attendance_service", "students_cache.pkl")
@@ -30,6 +35,10 @@ def _get_device():
     global _device
     if _device is None:
         import torch
+        try:
+            torch.set_num_threads(1)
+        except Exception:
+            pass
         _device = "cuda" if torch.cuda.is_available() else "cpu"
     return _device
 
@@ -56,6 +65,40 @@ def get_facenet():
 
 
 from typing import List, Optional
+
+
+def _create_photo_data_url(image_bytes: bytes, max_dim: int = 300) -> Optional[str]:
+    """
+    Creates a compressed, square-cropped JPEG base64 Data URI from raw image bytes.
+    Enables permanent persistence in PostgreSQL and instant UI loading across cloud server restarts.
+    """
+    if not image_bytes:
+        return None
+    try:
+        from PIL import Image, ImageOps
+        import io
+        import base64
+
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+
+        # Center crop to square
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        img_cropped = img.crop((left, top, left + min_dim, top + min_dim))
+        img_resized = img_cropped.resize((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        buf = io.BytesIO()
+        img_resized.save(buf, format="JPEG", quality=85, optimize=True)
+        b64_str = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64_str}"
+    except Exception as e:
+        logger.warning("Failed to create photo data URI: %s", e)
+        return None
+
 
 @router.post("/register")
 async def register_student(
@@ -183,7 +226,7 @@ async def register_student(
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! Face matches existing student '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
+                        detail=f"Duplicate Face Detected: Face matches existing student '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
@@ -193,16 +236,21 @@ async def register_student(
         from datetime import datetime
         now_iso = datetime.now().isoformat()
 
-        # Save photo file to disk for UI profile display
+        # Save photo: generate cloud-resilient Base64 Data URI + local disk fallback
         photo_url = None
         if saved_photo_bytes:
-            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
-            os.makedirs(profiles_dir, exist_ok=True)
-            photo_filename = f"{student_id}.jpg"
-            photo_disk_path = os.path.join(profiles_dir, photo_filename)
-            with open(photo_disk_path, "wb") as f:
-                f.write(saved_photo_bytes)
-            photo_url = f"/uploads/profiles/{photo_filename}"
+            photo_url = _create_photo_data_url(saved_photo_bytes, max_dim=300)
+            try:
+                profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+                os.makedirs(profiles_dir, exist_ok=True)
+                photo_filename = f"{student_id}.jpg"
+                photo_disk_path = os.path.join(profiles_dir, photo_filename)
+                with open(photo_disk_path, "wb") as f:
+                    f.write(saved_photo_bytes)
+                if not photo_url:
+                    photo_url = f"/uploads/profiles/{photo_filename}"
+            except Exception as disk_err:
+                logger.warning("Could not write photo to disk for %s: %s", student_id, disk_err)
 
         # Save student record with details and representative centroid embedding
         db_centroid_blob = pickle.dumps(np.array([final_emb]))
@@ -222,7 +270,7 @@ async def register_student(
         conn.commit()
         conn.close()
 
-        # ✅ Update Recognition Cache with multiple embeddings
+        # Update Recognition Cache with multiple embeddings
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
         cache = []
         if os.path.exists(CACHE_PATH):
@@ -255,14 +303,17 @@ async def register_student(
 
     except HTTPException:
         raise
+    except (ImportError, ModuleNotFoundError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric ML engine is initializing or unavailable. Please retry in a moment."
+        )
     except sqlite3.IntegrityError as e:
-        print(f"ERROR: Student registration uniqueness conflict: {e}")
         raise HTTPException(
             status_code=400,
             detail="Student ID is already registered"
         )
     except Exception as e:
-        print(f"ERROR: Student registration failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -320,6 +371,61 @@ def get_all_students(admin_user: dict = Depends(require_admin)):
 
     return result
 
+
+@router.get("/{student_id}")
+def get_student_profile(student_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Retrieves full profile for an individual student.
+    Accessible by Administrators or the authenticated Student themselves.
+    """
+    user_role = current_user.get("role")
+    logged_in_sid = current_user.get("student_id") or ""
+
+    if user_role != "admin" and logged_in_sid.strip().upper() != student_id.strip().upper():
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: You can only view your own student profile"
+        )
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT student_id, name, department, photo_url, year, email,
+               (embedding IS NOT NULL AND length(embedding) > 0) AS has_face
+        FROM students
+        WHERE student_id = ?
+    """, (student_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Student '{student_id}' not found")
+
+    cursor.execute("SELECT COUNT(DISTINCT date) FROM attendance")
+    total_dates_row = cursor.fetchone()
+    total_dates = total_dates_row[0] if total_dates_row else 0
+
+    cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id = ?", (student_id,))
+    att_row = cursor.fetchone()
+    present_count = att_row[0] if att_row else 0
+    conn.close()
+
+    rate = round((present_count / total_dates * 100), 1) if total_dates > 0 else 0.0
+
+    return {
+        "student_id": row[0],
+        "name": row[1],
+        "department": row[2] or "General",
+        "photo_url": row[3],
+        "year": row[4],
+        "email": row[5] or f"{row[0].lower()}@institution.edu",
+        "has_face": bool(row[6]),
+        "face_status": "registered" if bool(row[6]) else "not_registered",
+        "total_present": present_count,
+        "attendance_rate": rate
+    }
+
+
 @router.delete("/{student_id}")
 def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
     if student_id == "admin":
@@ -344,7 +450,7 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
         try:
             os.remove(photo_disk_path)
         except Exception as e:
-            print(f"[WARN] Failed to delete photo file for {student_id}: {e}")
+            logger.warning("Failed to delete photo file for %s: %s", student_id, e)
 
     # Update cache
     if os.path.exists(CACHE_PATH):
@@ -355,7 +461,7 @@ def delete_student(student_id: str, admin_user: dict = Depends(require_admin)):
             with open(CACHE_PATH, "wb") as f:
                 pickle.dump(cache, f)
         except Exception as e:
-            print(f"[WARN] Failed to remove student from cache file: {e}")
+            logger.warning("Failed to remove student from cache file: %s", e)
 
     return {"message": f"Student {student_id} successfully deleted"}
 
@@ -536,7 +642,7 @@ async def update_student_face(
                     match_pct = round(sim * 100, 1)
                     raise HTTPException(
                         status_code=400,
-                        detail=f"⚠️ Duplicate Face Detected! This face matches '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
+                        detail=f"Duplicate Face Detected: This face matches '{ex_name}' ({ex_sid}) with {match_pct}% similarity. The same face cannot be registered under multiple student IDs."
                     )
             except HTTPException:
                 raise
@@ -546,16 +652,21 @@ async def update_student_face(
         from datetime import datetime
         now_iso = datetime.now().isoformat()
 
-        # Save photo file to disk for UI profile display
+        # Save photo: generate cloud-resilient Base64 Data URI + local disk fallback
         photo_url = None
         if saved_photo_bytes:
-            profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
-            os.makedirs(profiles_dir, exist_ok=True)
-            photo_filename = f"{student_id}.jpg"
-            photo_disk_path = os.path.join(profiles_dir, photo_filename)
-            with open(photo_disk_path, "wb") as f:
-                f.write(saved_photo_bytes)
-            photo_url = f"/uploads/profiles/{photo_filename}"
+            photo_url = _create_photo_data_url(saved_photo_bytes, max_dim=300)
+            try:
+                profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+                os.makedirs(profiles_dir, exist_ok=True)
+                photo_filename = f"{student_id}.jpg"
+                photo_disk_path = os.path.join(profiles_dir, photo_filename)
+                with open(photo_disk_path, "wb") as f:
+                    f.write(saved_photo_bytes)
+                if not photo_url:
+                    photo_url = f"/uploads/profiles/{photo_filename}"
+            except Exception:
+                pass
 
         # Update representative centroid embedding and photo_url in students
         db_centroid_blob = pickle.dumps(np.array([final_emb]))
@@ -606,8 +717,149 @@ async def update_student_face(
 
     except HTTPException:
         raise
+    except (ImportError, ModuleNotFoundError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric ML engine is initializing or unavailable. Please retry in a moment."
+        )
     except Exception as e:
-        print(f"[UPDATE-FACE] Error: {e}")
+        logger.error("[UPDATE-FACE] Error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----------------------------------------------------------------------
+# Student Profile Picture Management & Storage Bucket Integration
+# ----------------------------------------------------------------------
+class Base64PhotoRequest(BaseModel):
+    image: str
+
+
+def _process_and_save_profile_picture(student_id: str, raw_bytes: bytes, current_user: dict) -> dict:
+    import time
+    from io import BytesIO
+    from PIL import Image, ImageOps
+
+    user_role = current_user.get("role")
+    logged_in_sid = (current_user.get("student_id") or "").strip()
+
+    # Access control: Student can only update their own profile, admin can update any
+    if user_role != "admin":
+        if not logged_in_sid or logged_in_sid.upper() != student_id.strip().upper():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access Denied: You can only upload a profile photo for your own account ({logged_in_sid})."
+            )
+
+    clean_sid = student_id.strip()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM students WHERE student_id = ?", (clean_sid,))
+    student_row = cursor.fetchone()
+    if not student_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Student {clean_sid} not found")
+
+    if len(raw_bytes) > 8 * 1024 * 1024:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Image file exceeds 8 MB size limit.")
+
+    try:
+        img = Image.open(BytesIO(raw_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+
+        # Crop to square center & resize to 400x400
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        img_cropped = img.crop((left, top, left + min_dim, top + min_dim))
+        img_resized = img_cropped.resize((400, 400), Image.Resampling.LANCZOS)
+
+        out_buffer = BytesIO()
+        img_resized.save(out_buffer, format="JPEG", quality=90, optimize=True)
+        processed_bytes = out_buffer.getvalue()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
+
+    # 1. Generate permanent cloud-resilient Base64 Data URI
+    import base64
+    b64_str = base64.b64encode(processed_bytes).decode("ascii")
+    data_url = f"data:image/jpeg;base64,{b64_str}"
+
+    # 2. Local container disk fallback
+    try:
+        profiles_dir = os.path.join(ROOT_DIR, "uploads", "profiles")
+        os.makedirs(profiles_dir, exist_ok=True)
+        photo_filename = f"{clean_sid}.jpg"
+        photo_path = os.path.join(profiles_dir, photo_filename)
+        with open(photo_path, "wb") as f:
+            f.write(processed_bytes)
+    except Exception:
+        pass
+
+    photo_url = data_url
+
+    # Update database record
+    cursor.execute("UPDATE students SET photo_url = ? WHERE student_id = ?", (photo_url, clean_sid))
+    conn.commit()
+    conn.close()
+
+    # Emit notification
+    try:
+        from backend_api.routers.notifications import create_notification
+        create_notification(
+            student_id=clean_sid,
+            title="Profile Photo Updated",
+            message=f"Your profile picture has been successfully updated.",
+            notif_type="profile_update",
+            severity="success",
+            action_url="/student/dashboard"
+        )
+    except Exception:
+        pass
+
+    versioned_url = f"{photo_url}?v={int(time.time())}"
+
+    return {
+        "success": True,
+        "message": "Profile picture updated successfully",
+        "student_id": clean_sid,
+        "photo_url": versioned_url
+    }
+
+
+@router.post("/{student_id}/profile-picture")
+async def upload_profile_picture_multipart(
+    student_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload student profile picture using standard multipart form-data."""
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+    return _process_and_save_profile_picture(student_id, raw_bytes, current_user)
+
+
+@router.post("/{student_id}/profile-picture-base64")
+async def upload_profile_picture_base64(
+    student_id: str,
+    payload: Base64PhotoRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload student profile picture using base64 JSON payload."""
+    import base64
+    img_data = payload.image
+    if "," in img_data:
+        img_data = img_data.split(",")[1]
+    try:
+        raw_bytes = base64.b64decode(img_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+    return _process_and_save_profile_picture(student_id, raw_bytes, current_user)
+
 
 

@@ -34,45 +34,64 @@ class TemporalSmoother:
 class TemporalVerifier:
     """
     Guarantees that attendance is marked ONLY after a student has been
-    consistently and reliably recognized across multiple frames within
-    a defined time window.
+    consistently and reliably recognized across at least 3 consecutive frames
+    within a reasonable inter-frame time interval.
     """
 
     def __init__(
         self,
-        required_consistent_frames: int = 4,
-        time_window_seconds: float = 2.0
+        required_consistent_frames: int = 3,
+        max_interval_seconds: float = 3.0,
+        time_window_seconds: float = 10.0
     ):
         self.required_consistent_frames = required_consistent_frames
+        self.max_interval_seconds = max_interval_seconds
         self.time_window_seconds = time_window_seconds
-        # student_id -> list of timestamps where valid recognition occurred
-        self.match_timestamps: Dict[str, deque] = {}
+        # student_id -> dict: {"count": int, "last_time": float}
+        self._student_streaks: Dict[str, Dict[str, Any]] = {}
 
     def record_match(self, student_id: str) -> Tuple[bool, int]:
         """
         Records a valid recognition frame for student_id.
+        Increments consecutive streak if within max_interval_seconds;
+        resets streak to 1 if inter-frame gap was exceeded.
         Returns:
-            (is_verified, consistent_frame_count)
+            (is_verified, consecutive_frame_count)
         """
         now = time.time()
-        if student_id not in self.match_timestamps:
-            self.match_timestamps[student_id] = deque(maxlen=self.required_consistent_frames * 2)
+        sid = str(student_id).strip().upper()
 
-        q = self.match_timestamps[student_id]
-        q.append(now)
+        if sid in self._student_streaks:
+            last_time = self._student_streaks[sid]["last_time"]
+            gap = now - last_time
+            if 0 <= gap <= self.max_interval_seconds:
+                self._student_streaks[sid]["count"] += 1
+            else:
+                # Interrupted streak (gap too long)
+                self._student_streaks[sid]["count"] = 1
+        else:
+            self._student_streaks[sid] = {"count": 1, "last_time": now}
 
-        # Evict timestamps older than time_window_seconds
-        cutoff = now - self.time_window_seconds
-        recent = [t for t in q if t >= cutoff]
-        self.match_timestamps[student_id] = deque(recent, maxlen=self.required_consistent_frames * 2)
-
-        count = len(recent)
+        self._student_streaks[sid]["last_time"] = now
+        count = self._student_streaks[sid]["count"]
         is_verified = count >= self.required_consistent_frames
         return is_verified, count
 
+    def get_streak(self, student_id: str) -> int:
+        """Returns the current consecutive streak for student_id if still active."""
+        sid = str(student_id).strip().upper()
+        if sid in self._student_streaks:
+            now = time.time()
+            if now - self._student_streaks[sid]["last_time"] <= self.max_interval_seconds:
+                return self._student_streaks[sid]["count"]
+        return 0
+
     def reset_student(self, student_id: str):
-        if student_id in self.match_timestamps:
-            del self.match_timestamps[student_id]
+        """Resets the consecutive streak for a specific student."""
+        sid = str(student_id).strip().upper()
+        if sid in self._student_streaks:
+            del self._student_streaks[sid]
 
     def reset_all(self):
-        self.match_timestamps.clear()
+        """Resets all active verification streaks."""
+        self._student_streaks.clear()

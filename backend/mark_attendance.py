@@ -101,7 +101,7 @@ def run_attendance():
                         best_score = score
                         best_match = (student_id, name)
                 
-                # 🔍 ALWAYS show similarity score
+                # ALWAYS show similarity score
                 cv2.putText(
                 frame,
                 f"Score: {best_score:.2f}",
@@ -111,7 +111,7 @@ def run_attendance():
                 (0, 255, 255),
                 2
             )
-                # ✅ If recognized
+                # If recognized
                 if best_score > threshold:
                     student_id, name = best_match
                     

@@ -1,4 +1,7 @@
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 from typing import Dict, Any, Tuple, Optional
 
@@ -14,11 +17,11 @@ class FaceQualityChecker:
 
     def __init__(
         self,
-        min_face_size: int = 60,
-        min_blur_var: float = 30.0,
-        min_brightness: float = 35.0,
-        max_brightness: float = 240.0,
-        min_contrast: float = 18.0
+        min_face_size: int = 50,
+        min_blur_var: float = 20.0,
+        min_brightness: float = 30.0,
+        max_brightness: float = 245.0,
+        min_contrast: float = 15.0
     ):
         self.min_face_size = min_face_size
         self.min_blur_var = min_blur_var
@@ -72,7 +75,13 @@ class FaceQualityChecker:
                 "reason": "empty_crop"
             }
 
-        face_gray = cv2.cvtColor(face_patch, cv2.COLOR_RGB2GRAY)
+        if cv2 is not None:
+            face_gray = cv2.cvtColor(face_patch, cv2.COLOR_RGB2GRAY)
+        else:
+            if face_patch.ndim == 3 and face_patch.shape[2] >= 3:
+                face_gray = np.dot(face_patch[..., :3].astype(np.float64), [0.299, 0.587, 0.114])
+            else:
+                face_gray = face_patch.astype(np.float64)
 
         # 2. Lighting Assessment
         mean_lum = float(np.mean(face_gray))
@@ -99,7 +108,20 @@ class FaceQualityChecker:
         contrast_score = min(1.0, max(0.0, std_lum / 50.0))
 
         # 3. Blur Assessment (Laplacian Variance)
-        blur_var = float(cv2.Laplacian(face_gray, cv2.CV_64F).var())
+        if cv2 is not None:
+            blur_var = float(cv2.Laplacian(face_gray, cv2.CV_64F).var())
+        else:
+            if face_gray.shape[0] >= 3 and face_gray.shape[1] >= 3:
+                lap = (
+                    face_gray[:-2, 1:-1] +
+                    face_gray[2:, 1:-1] +
+                    face_gray[1:-1, :-2] +
+                    face_gray[1:-1, 2:] -
+                    4.0 * face_gray[1:-1, 1:-1]
+                )
+                blur_var = float(np.var(lap))
+            else:
+                blur_var = 0.0
         if blur_var < self.min_blur_var:
             return {
                 "valid": False,

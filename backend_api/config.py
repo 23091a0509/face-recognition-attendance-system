@@ -17,8 +17,8 @@ LOCAL_TZ = IST
 ATTENDANCE_LATE_AFTER = os.getenv("ATTENDANCE_LATE_AFTER", "09:15")
 
 # Biometric & Recognition Thresholds (Calibrated)
-FACE_RECOGNITION_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.72"))
-MIN_MATCH_MARGIN = float(os.getenv("MIN_MATCH_MARGIN", "0.06"))
+FACE_RECOGNITION_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.75"))
+MIN_MATCH_MARGIN = float(os.getenv("MIN_MATCH_MARGIN", "0.08"))
 REQUIRED_CONSISTENT_FRAMES = int(os.getenv("REQUIRED_CONSISTENT_FRAMES", "3"))
 
 # Security Configuration
@@ -55,8 +55,8 @@ def get_time_str() -> str:
     """Returns current time formatted as HH:MM:SS in institution timezone."""
     return get_now().strftime("%H:%M:%S")
 
-def is_attendance_late(time_str: str) -> bool:
-    """Determines if a given time HH:MM:SS is considered Late based on ATTENDANCE_LATE_AFTER."""
+def is_attendance_late(time_str: str, late_after: str = None) -> bool:
+    """Determines if a given time HH:MM:SS is considered Late based on late_after or ATTENDANCE_LATE_AFTER."""
     if not time_str or time_str == "--:--":
         return False
     try:
@@ -64,7 +64,8 @@ def is_attendance_late(time_str: str) -> bool:
         h = int(parts[0])
         m = int(parts[1])
         
-        cutoff_parts = ATTENDANCE_LATE_AFTER.split(":")
+        cutoff = late_after or ATTENDANCE_LATE_AFTER
+        cutoff_parts = cutoff.split(":")
         cutoff_h = int(cutoff_parts[0])
         cutoff_m = int(cutoff_parts[1])
         

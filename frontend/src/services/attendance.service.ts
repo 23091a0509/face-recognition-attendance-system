@@ -58,6 +58,8 @@ export interface AttendanceStats {
     student_id: string;
     present: number;
     total_classes: number;
+    absent?: number;
+    percentage?: number;
     attendance_percentage: number;
 }
 
@@ -134,13 +136,45 @@ export interface FrameRecognitionResult {
     quality_warning?: string;
     enrolled?: boolean;
     message?: string;
+    verifying?: boolean;
+    consecutive_frames?: number;
+    required_frames?: number;
 }
 
-export async function recognizeFrame(image: string, confidenceThreshold: number = 0.65): Promise<FrameRecognitionResult> {
-    const res = await api.post("/attendance/recognize-frame", {
-        image,
-        confidence_threshold: confidenceThreshold
-    });
+export interface AdminSettingsData {
+    ip_restriction_enabled: boolean;
+    allowed_ips: string;
+    client_ip?: string;
+    face_threshold?: number;
+    min_margin?: number;
+    duplicate_protection?: boolean;
+    duplicate_window_minutes?: number;
+    late_after_time?: string;
+}
+
+export async function recognizeFrame(
+    image: string,
+    confidenceThreshold?: number,
+    targetStudentId?: string
+): Promise<FrameRecognitionResult> {
+    const payload: { image: string; confidence_threshold?: number; target_student_id?: string } = { image };
+    if (confidenceThreshold !== undefined) {
+        payload.confidence_threshold = confidenceThreshold;
+    }
+    if (targetStudentId && targetStudentId !== "AUTO") {
+        payload.target_student_id = targetStudentId;
+    }
+    const res = await api.post("/attendance/recognize-frame", payload);
+    return res.data;
+}
+
+export async function getAdminSettings(): Promise<AdminSettingsData> {
+    const res = await api.get("/admin/settings");
+    return res.data;
+}
+
+export async function saveAdminSettings(data: AdminSettingsData): Promise<any> {
+    const res = await api.post("/admin/settings", data);
     return res.data;
 }
 
